@@ -14,6 +14,7 @@ from google.genai import types
 from . import arms, config
 from .data import Corpus, load_questions, load_registry
 from .llm import GeminiLLM, make_client
+from .openrouter import OpenRouterLLM, get_model_info
 from .registry import CHECK_LATEST_VERSION_DECL
 from .report import build_report, export_handcheck, latest_per_job, load_jsonl, select_confirm
 from .retrieval import GeminiEmbedder
@@ -30,9 +31,16 @@ STAGES = {
 }
 
 
-def _require_key():
+def _require_key(judge: bool = False):
     if not (os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")):
         sys.exit("Set GEMINI_API_KEY (create one at https://aistudio.google.com/apikey).")
+    if judge and not os.environ.get("OPENROUTER_API_KEY"):
+        sys.exit("Set OPENROUTER_API_KEY for the judge (create one at https://openrouter.ai/settings/keys), "
+                 "or pass --no-score.")
+
+
+def make_judge_llm() -> OpenRouterLLM:
+    return OpenRouterLLM(model=config.JUDGE_MODEL, reasoning_effort=config.JUDGE_REASONING_EFFORT)
 
 
 def _git_commit():
@@ -44,17 +52,16 @@ def _git_commit():
 
 
 def cmd_preflight(args):
-    """Fail fast: model exists, function calling round-trips, JSON output works."""
-    _require_key()
+    """Fail fast: models exist, function calling round-trips, the judge returns schema JSON."""
+    _require_key(judge=True)
     client = make_client()
     ok = True
-    for name in sorted({args.model, config.JUDGE_MODEL}):
-        m = client.models.get(model=name)
-        actions = m.supported_actions or []
-        print(f"{name}: version={m.version} input_limit={m.input_token_limit} thinking={m.thinking} actions={actions}")
-        if "generateContent" not in actions:
-            print(f"  FAIL: {name} doesn't list generateContent")
-            ok = False
+    m = client.models.get(model=args.model)
+    actions = m.supported_actions or []
+    print(f"{args.model}: version={m.version} input_limit={m.input_token_limit} thinking={m.thinking} actions={actions}")
+    if "generateContent" not in actions:
+        print(f"  FAIL: {args.model} doesn't list generateContent")
+        ok = False
 
     llm = GeminiLLM(model=args.model, client=client)
     contents = [types.Content(role="user", parts=[types.Part(text=(
@@ -75,12 +82,26 @@ def cmd_preflight(args):
         print(f"tool round-trip OK: {turn2.text.strip()[:160]!r}")
         print(f"usage: {turn.usage} / {turn2.usage}; cost ${(turn.record['cost_usd'] or 0) + (turn2.record['cost_usd'] or 0):.5f}")
 
-    judge = GeminiLLM(model=config.JUDGE_MODEL, thinking_level=config.JUDGE_THINKING_LEVEL, client=client)
-    jt = judge.generate(system="Reply in JSON.", seed=0,
-                        contents=[types.Content(role="user", parts=[types.Part(text="Is 2+2 equal to 4?")])],
-                        json_schema={"type": "object", "properties": {"yes": {"type": "boolean"}}, "required": ["yes"]})
+    info = get_model_info(config.JUDGE_MODEL)
+    if info is None:
+        print(f"  FAIL: judge model {config.JUDGE_MODEL} isn't listed on OpenRouter /api/v1/models")
+        ok = False
+    else:
+        params = info.get("supported_parameters") or []
+        print(f"judge {config.JUDGE_MODEL}: pricing={info.get('pricing', {}).get('prompt')}/"
+              f"{info.get('pricing', {}).get('completion')} per token; structured outputs="
+              f"{'structured_outputs' in params}; reasoning={'reasoning' in params}")
+        if "structured_outputs" not in params and "response_format" not in params:
+            print("  FAIL: judge model doesn't list structured_outputs / response_format")
+            ok = False
+    jt = make_judge_llm().generate(
+        system="Reply in JSON.", seed=0,
+        contents=[types.Content(role="user", parts=[types.Part(text="Is 2+2 equal to 4?")])],
+        json_schema={"type": "object", "properties": {"yes": {"type": "boolean"}}, "required": ["yes"],
+                     "additionalProperties": False})
     try:
-        print(f"judge JSON OK: {json.loads(jt.text)}")
+        print(f"judge JSON OK: {json.loads(jt.text)} (served by {jt.record['model_version']}, "
+              f"${jt.record['cost_usd'] or 0:.5f})")
     except json.JSONDecodeError:
         print(f"  FAIL: judge didn't return JSON: {jt.text[:200]!r}")
         ok = False
@@ -92,7 +113,7 @@ def cmd_preflight(args):
 
 
 def cmd_run(args):
-    _require_key()
+    _require_key(judge=not args.no_score)
     questions = load_questions()
     qfilter, stage_arms, seeds, condition = STAGES[args.stage]
     if args.stage == "confirm":
@@ -119,7 +140,7 @@ def cmd_run(args):
     run_dir.mkdir(parents=True, exist_ok=True)
     (run_dir / "meta.json").write_text(json.dumps({
         "stage": args.stage, "model": args.model, "thinking_level": config.THINKING_LEVEL or "default",
-        "judge_model": config.JUDGE_MODEL, "judge_thinking_level": config.JUDGE_THINKING_LEVEL,
+        "judge_model": config.JUDGE_MODEL, "judge_reasoning_effort": config.JUDGE_REASONING_EFFORT,
         "embed_model": config.EMBED_MODEL if args.retrieval == "hybrid" else None,
         "retrieval": args.retrieval, "arms": arm_list, "seeds": seed_list, "condition": condition,
         "questions": [q.id for q in selected], "prompt_version": config.PROMPT_VERSION,
@@ -133,14 +154,13 @@ def cmd_run(args):
     run_jobs(llm, jobs, Corpus(), load_registry(), run_dir / "results.jsonl",
              embedder=embedder, workers=args.workers, use_cache=not args.no_cache)
     if not args.no_score:
-        score(run_dir, client, args.workers)
+        score(run_dir, args.workers)
 
 
-def score(run_dir, client=None, workers=4):
+def score(run_dir, workers=4):
     qs = {q.id: q for q in load_questions()}
     rows = [r for r in latest_per_job(load_jsonl(run_dir / "results.jsonl")) if not r.get("error")]
-    judge = Judge(GeminiLLM(model=config.JUDGE_MODEL, thinking_level=config.JUDGE_THINKING_LEVEL,
-                            client=client or make_client()))
+    judge = Judge(make_judge_llm())
     with ThreadPoolExecutor(max_workers=workers) as pool:
         scored = list(pool.map(lambda r: score_record(r, qs[r["qid"]], judge), rows))
     with open(run_dir / "scored.jsonl", "w") as f:
@@ -152,7 +172,8 @@ def score(run_dir, client=None, workers=4):
 
 
 def cmd_score(args):
-    _require_key()
+    if not os.environ.get("OPENROUTER_API_KEY"):
+        sys.exit("Set OPENROUTER_API_KEY for the judge (create one at https://openrouter.ai/settings/keys).")
     score(_run_dir(args.run), workers=args.workers)
 
 

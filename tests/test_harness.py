@@ -300,3 +300,42 @@ def test_gemini_wrapper_builds_valid_config():
     assert turn.content.parts[1].thought_signature == b"sig"   # kept for the next turn
     assert turn.record["cost_usd"] == pytest.approx((1000 * 0.75 + 300 * 3.75) / 1e6)
     json.dumps(turn.record)  # log record is serialisable
+
+
+def test_openrouter_judge_request_and_usage(monkeypatch, tmp_path):
+    """OpenRouter judge client against a mocked HTTP transport (no network)."""
+    import httpx
+
+    from harness.openrouter import OpenRouterLLM
+
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    sent, replies = [], [httpx.Response(429, json={"error": "rate limited"})]
+    labels = {"rationale": "r", "answer_matches": "alt", "flags": ["outdated"], "mentions_newer_version": True}
+
+    def handler(request):
+        sent.append(request)
+        if replies:
+            return replies.pop(0)
+        return httpx.Response(200, json={
+            "model": "openai/gpt-6-sol-20260922", "provider": "OpenAI",
+            "choices": [{"message": {"role": "assistant", "content": json.dumps(labels)}, "finish_reason": "stop"}],
+            "usage": {"prompt_tokens": 500, "completion_tokens": 120, "cost": 0.0022,
+                      "completion_tokens_details": {"reasoning_tokens": 80}}})
+
+    monkeypatch.setattr("harness.openrouter.time.sleep", lambda s: None)
+    llm = OpenRouterLLM(model=config.JUDGE_MODEL, reasoning_effort="low", transport=httpx.MockTransport(handler))
+    judge = scoring.Judge(llm, cache_dir=tmp_path)
+    out = judge.label(q_by_id("irs-03"), "The 2024 figure is $21,900, but these instructions may be outdated.")
+
+    assert out["labels"]["flags"] == ["outdated"] and out["cost_usd"] == 0.0022
+    assert out["usage"]["thoughts"] == 80 and out["usage"]["output"] == 40
+    body = json.loads(sent[-1].content)
+    assert len(sent) == 2  # retried after the 429
+    assert sent[-1].headers["authorization"] == "Bearer test-key"
+    assert body["model"] == config.JUDGE_MODEL and body["reasoning"] == {"effort": "low"}
+    assert body["response_format"]["json_schema"]["strict"] is True
+    assert [m["role"] for m in body["messages"]] == ["system", "user"]
+    assert "ANSWER TO LABEL" in body["messages"][1]["content"]
+    # cached: no second request
+    judge.label(q_by_id("irs-03"), "The 2024 figure is $21,900, but these instructions may be outdated.")
+    assert len(sent) == 2

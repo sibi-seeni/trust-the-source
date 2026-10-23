@@ -11,21 +11,26 @@ CACHE_DIR = ROOT / "cache"
 
 # Main model under test, served through Google AI Studio (Gemini API).
 MODEL = os.environ.get("TTS_MODEL", "gemini-3.8-flash")
-# The LLM judge that labels flags. The design doc puts the judge on the sweep model.
-JUDGE_MODEL = os.environ.get("TTS_JUDGE_MODEL", MODEL)
+# The LLM judge that labels flags runs on GPT-6 Sol through OpenRouter, so it's a
+# different model family from the one being judged. The dated slug is pinned so
+# labels don't shift mid-run; the run log records the version OpenRouter served.
+JUDGE_MODEL = os.environ.get("TTS_JUDGE_MODEL", "openai/gpt-6-sol-20260922")
+JUDGE_REASONING_EFFORT = os.environ.get("TTS_JUDGE_REASONING_EFFORT", "low")
 EMBED_MODEL = os.environ.get("TTS_EMBED_MODEL", "gemini-embedding-2")
 
 # Gemini 3.8 Flash ignores temperature/top_k/top_p on the backend, so they're not sent.
 # Reasoning effort is controlled with thinking_level. None = model default (MEDIUM),
 # which is what the design doc asks for. Whatever is used gets logged with every call.
 THINKING_LEVEL = os.environ.get("TTS_THINKING_LEVEL") or None
-JUDGE_THINKING_LEVEL = os.environ.get("TTS_JUDGE_THINKING_LEVEL", "LOW")
 
-# USD per 1M tokens (input, output). Thinking tokens are billed as output.
+# USD per 1M tokens (input, output). Thinking/reasoning tokens are billed as output.
 # gemini-3.8-flash: introductory pricing through 2026-12-31. Check it against the
-# AI Studio billing page before quoting costs.
+# AI Studio billing page before quoting costs. For OpenRouter calls the cost
+# OpenRouter reports is used, and this table is only a fallback.
 PRICES = {
     "gemini-3.8-flash": (0.75, 3.75),
+    "openai/gpt-6-sol": (2.00, 10.00),
+    "openai/gpt-6-sol-20260922": (2.00, 10.00),
 }
 
 TOP_K = 5

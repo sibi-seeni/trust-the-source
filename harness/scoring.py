@@ -43,6 +43,7 @@ JUDGE_SCHEMA = {
         "mentions_newer_version": {"type": "boolean"},
     },
     "required": ["rationale", "answer_matches", "flags", "mentions_newer_version"],
+    "additionalProperties": False,
 }
 
 
