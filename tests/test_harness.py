@@ -1,0 +1,341 @@
+"""Offline tests: data integrity, registry, arms (with a scripted fake model),
+scoring and the report. No API key needed."""
+
+import json
+import re
+
+import pytest
+from google.genai import types
+
+from harness import arms, config, report, runner, scoring
+from harness.data import Corpus, load_questions, load_registry
+from harness.llm import LLMTurn
+from harness.registry import MockRegistry
+from harness.retrieval import retrieve
+
+QUESTIONS = load_questions()
+CORPUS = Corpus()
+REGISTRY = load_registry()
+
+
+class FakeLLM:
+    """Calls `script(system, contents, decls, kwargs)` -> (text, [(name, args), ...])."""
+
+    def __init__(self, script, model="fake-model"):
+        self.script, self.model, self.thinking_level = script, model, None
+        self.calls = []
+
+    def generate(self, *, system, contents, function_decls=None, **kw):
+        self.calls.append({"system": system, "contents": list(contents),
+                           "decls": [d["name"] for d in function_decls or []], **kw})
+        text, fcalls = self.script(system, contents, [d["name"] for d in function_decls or []], kw)
+        parts = [types.Part(function_call=types.FunctionCall(id=f"call-{i}", name=n, args=a))
+                 for i, (n, a) in enumerate(fcalls)]
+        if text:
+            parts.append(types.Part(text=text))
+        content = types.Content(role="model", parts=parts)
+        usage = {"prompt": 100, "output": 10, "thoughts": 5, "tool_use_prompt": 0, "cached": 0}
+        record = {"model": self.model, "model_version": "fake-1", "usage": usage, "cost_usd": 0.001,
+                  "latency_s": 0.0, "response_content": content.model_dump(mode="json", exclude_none=True)}
+        return LLMTurn(content=content, text=text, function_calls=[p.function_call for p in parts if p.function_call],
+                       usage=usage, latency_s=0.0, record=record)
+
+
+def q_by_id(qid):
+    return next(q for q in QUESTIONS if q.id == qid)
+
+
+def ctx_for(q, llm, unavailable=False):
+    return arms.RunContext(question=q, passages=retrieve(q, CORPUS.pool_for(q)),
+                           registry=MockRegistry(REGISTRY, unavailable=unavailable), llm=llm, seed=0)
+
+
+# ---- data integrity -------------------------------------------------------
+
+def test_question_ids_unique_and_cases_valid():
+    ids = [q.id for q in QUESTIONS]
+    assert len(ids) == len(set(ids))
+    assert {q.case for q in QUESTIONS} <= {"C1", "C2", "C3", "C4", "C5", "C6", "C7"}
+
+
+@pytest.mark.parametrize("q", QUESTIONS, ids=lambda q: q.id)
+def test_question_corpus_and_gold_passages(q):
+    for d in q.corpus:
+        assert d in CORPUS.docs, d
+        assert CORPUS.docs[d]["family"] == q.family
+    for pid in q.gold_passages:
+        assert CORPUS.passages[pid].doc_id in q.corpus
+    got = retrieve(q, CORPUS.pool_for(q))
+    assert set(q.gold_passages) <= {p.pid for p in got}
+    assert len(got) == max(config.TOP_K, len(q.gold_passages))
+    for pattern in q.accept + q.alt:
+        re.compile(pattern)
+
+
+def test_c2_corpus_excludes_newer_version():
+    for q in QUESTIONS:
+        if q.case == "C2":
+            pool_docs = {p.doc_id for p in CORPUS.pool_for(q)}
+            newest = [d for d in CORPUS.docs.values() if d["family"] == q.family and d.get("default_pool")]
+            assert not any(d["doc_id"] in pool_docs for d in newest), q.id
+
+
+def test_every_doc_family_is_in_registry():
+    for d in CORPUS.docs.values():
+        assert d["family"] in REGISTRY["families"]
+
+
+# ---- registry -------------------------------------------------------------
+
+@pytest.mark.parametrize("query,version,status", [
+    ("NIST SP 800-53 Revision 4 (NIST.SP.800-53r4.pdf)", "Rev 4", "withdrawn"),
+    ("2024 Instructions for Form 1040 (i1040gi_2024.pdf)", "Tax Year 2024", "superseded"),
+    ("pandas 2.0 API reference (pandas-docs-2.0.pdf)", "2.0", "current"),
+    ("FM 3-0 Operations (October 2017) (FM3-0_2017.pdf)", "2017", "superseded"),
+    ("GSA Per Diem Rates, Fiscal Year 2025 (FY2025_PerDiem_Rates.pdf)", "FY2025", "current"),
+])
+def test_registry_lookup_by_title_and_filename(query, version, status):
+    r = MockRegistry(REGISTRY).lookup(query)
+    assert r["version"] == version and r["status"] == status
+
+
+def test_registry_undated_doc_returns_unknown_version():
+    r = MockRegistry(REGISTRY).lookup("Instructions for Form 1040 (i1040gi.pdf)")
+    assert r["version"] == "unknown" and r["latest"] == "Tax Year 2025"
+
+
+def test_registry_unavailable_and_unknown():
+    assert "error" in MockRegistry(REGISTRY, unavailable=True).lookup("NIST SP 800-53 Rev 4")
+    assert MockRegistry(REGISTRY).lookup("Some unrelated manual")["found"] is False
+
+
+def test_forced_check_annotation_mentions_supersession():
+    r = MockRegistry(REGISTRY).lookup("NIST SP 800-53 Revision 4 (NIST.SP.800-53r4.pdf)")
+    line = arms.summarize_lookup(r)
+    assert "WITHDRAWN" in line and "SUPERSEDED by Rev 5" in line
+
+
+# ---- arms -----------------------------------------------------------------
+
+def test_a0_has_no_freshness_line_and_a1_does():
+    q = q_by_id("irs-01")
+    for arm, expected in (("A0", False), ("A1", True)):
+        llm = FakeLLM(lambda *a: ("$15,750 [1]", []))
+        arms.ARM_FUNCS[arm](ctx_for(q, llm))
+        assert (arms.prompts.FRESHNESS_LINE in llm.calls[0]["system"]) == expected
+
+
+def test_a2_shows_metadata():
+    llm = FakeLLM(lambda *a: ("answer", []))
+    arms.a2_metadata(ctx_for(q_by_id("nist-03"), llm))
+    user_text = llm.calls[0]["contents"][0].parts[0].text
+    assert "status=withdrawn" in user_text
+
+
+def test_a3_tool_loop_returns_matching_function_response():
+    def script(system, contents, decls, kw):
+        if len(contents) == 1:
+            return "", [("check_latest_version", {"title_or_id": "NIST SP 800-53 Rev 4"})]
+        return "Rev 4 is withdrawn; Rev 5 has 20 families.", []
+    llm = FakeLLM(script)
+    ctx = ctx_for(q_by_id("nist-03"), llm)
+    answer = arms.a3_tool(ctx)
+    assert answer.startswith("Rev 4 is withdrawn")
+    fr = llm.calls[1]["contents"][-1].parts[0].function_response
+    assert fr.id == "call-0" and fr.name == "check_latest_version" and fr.response["status"] == "withdrawn"
+    assert arms.registry_was_checked(ctx.trace)
+
+
+def test_a3_forces_final_answer_after_max_steps():
+    llm = FakeLLM(lambda s, c, d, kw: ("final" if kw.get("tool_mode") == "NONE" else "",
+                                       [] if kw.get("tool_mode") == "NONE" else [("check_latest_version", {"title_or_id": "x"})]))
+    assert arms.a3_tool(ctx_for(q_by_id("irs-01"), llm)) == "final"
+    assert len(llm.calls) == config.MAX_TOOL_STEPS + 1
+
+
+def test_a4_annotates_every_passage_without_model_tools():
+    llm = FakeLLM(lambda *a: ("answer", []))
+    ctx = ctx_for(q_by_id("irs-03"), llm)
+    arms.a4_forced_check(ctx)
+    assert llm.calls[0]["decls"] == []
+    assert llm.calls[0]["contents"][0].parts[0].text.count("Registry check:") == len(ctx.passages)
+    assert arms.registry_was_checked(ctx.trace)
+
+
+def test_a5_skill_unlocks_registry_tool():
+    def script(system, contents, decls, kw):
+        n = len(contents)
+        if n == 1:
+            return "", [("load_skill", {"name": "version-check"})]
+        if n == 3:
+            return "", [("check_latest_version", {"title_or_id": "2024 Instructions for Form 1040"})]
+        return "Superseded; 2025 value is $23,625.", []
+    llm = FakeLLM(script)
+    ctx = ctx_for(q_by_id("irs-03"), llm)
+    arms.a5_skill(ctx)
+    assert llm.calls[0]["decls"] == ["load_skill"]
+    assert "check_latest_version" in llm.calls[1]["decls"]
+    skill_reply = llm.calls[1]["contents"][-1].parts[0].function_response.response
+    assert "Version check" in skill_reply["skill"]
+    assert arms.registry_was_checked(ctx.trace)
+
+
+def test_a6_and_a7_run_verifier():
+    def script(system, contents, decls, kw):
+        if system == arms.prompts.VERIFIER_SYSTEM:
+            if len(contents) == 1:
+                return "", [("check_latest_version", {"title_or_id": "NIST.SP.800-53r4.pdf"})]
+            return '[{"doc": "NIST.SP.800-53r4.pdf", "status": "withdrawn", "latest_value": "Rev 5", "confidence": "high"}]', []
+        if "verify_sources" in decls and len(contents) == 1:
+            return "", [("verify_sources", {})]
+        return "Rev 4 is withdrawn.", []
+    for arm in ("A6", "A7"):
+        llm = FakeLLM(script)
+        ctx = ctx_for(q_by_id("nist-03"), llm)
+        assert arms.ARM_FUNCS[arm](ctx) == "Rev 4 is withdrawn."
+        roles = [e["role"] for e in ctx.trace if e["type"] == "llm_call"]
+        assert "verifier" in roles and "main" in roles
+        assert arms.registry_was_checked(ctx.trace)
+    final_prompt = llm.calls[-1]["contents"][0].parts[0].text
+    assert "Source verification report" in final_prompt and "withdrawn" in final_prompt
+
+
+# ---- scoring --------------------------------------------------------------
+
+def test_rule_match_normalises_currency():
+    q = q_by_id("irs-01")
+    assert scoring.rule_match(q, "It is $15,750 for 2025.") == "gold"
+    assert scoring.rule_match(q, "It is $14,600.") == "alt"
+    assert scoring.rule_match(q, "Now $15,750, up from $14,600.") is None
+
+
+@pytest.mark.parametrize("case,matches,flags,expected", [
+    ("C1", "gold", [], "correct"),
+    ("C1", "alt", [], "stale"),
+    ("C2", "alt", [], "stale"),
+    ("C2", "alt", ["outdated"], "flagged_correctly"),
+    ("C2", "gold", [], "correct"),
+    ("C3", "alt", [], "missed_flag"),
+    ("C3", "alt", ["unverifiable"], "flagged_correctly"),
+    ("C4", "alt", [], "stale"),
+    ("C5", "gold", [], "correct"),
+    ("C5", "gold", ["outdated"], "false_flag"),
+    ("C5", "alt", [], "false_flag"),
+    ("C6", "gold", ["outdated"], "false_flag"),
+    ("C6", "gold", [], "correct"),
+    ("C7", "alt", ["outdated"], "missed_flag"),
+    ("C7", "alt", ["inconsistent"], "flagged_correctly"),
+])
+def test_outcome_mapping(case, matches, flags, expected):
+    assert scoring.outcome(case, matches, flags) == expected
+
+
+def test_registry_unavailable_outcome():
+    assert scoring.outcome("C1", "gold", ["unable_to_verify"], "registry_unavailable") == "flagged_correctly"
+    assert scoring.outcome("C1", "gold", [], "registry_unavailable") == "missed_flag"
+
+
+# ---- end to end (fake model and judge) ------------------------------------
+
+def test_pipeline_end_to_end(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "CACHE_DIR", tmp_path / "cache")
+    qs = [q for q in QUESTIONS if q.pilot]
+    main = FakeLLM(lambda *a: ("The answer is $15,750 [1].", []))
+    jobs = [(q, a, 0, "normal") for q in qs for a in config.ARMS]
+    out = tmp_path / "run" / "results.jsonl"
+    results = runner.run_jobs(main, jobs, CORPUS, REGISTRY, out, workers=2)
+    assert len(results) == len(jobs) and not any(r["error"] for r in results)
+
+    # second pass is served from cache
+    again = runner.run_jobs(main, jobs, CORPUS, REGISTRY, tmp_path / "run" / "again.jsonl", workers=2)
+    assert all(r["from_cache"] for r in again)
+
+    judge_llm = FakeLLM(lambda *a: (json.dumps({"rationale": "x", "answer_matches": "gold", "flags": [],
+                                                  "mentions_newer_version": False}), []), model="fake-judge")
+    judge = scoring.Judge(judge_llm, cache_dir=tmp_path / "judge")
+    qmap = {q.id: q for q in QUESTIONS}
+    scored = [scoring.score_record(r, qmap[r["qid"]], judge) for r in report.latest_per_job(results)]
+    scored_path = tmp_path / "run" / "scored.jsonl"
+    scored_path.write_text("\n".join(json.dumps(s) for s in scored) + "\n")
+    md = report.build_report(scored_path)
+    assert "| A4 |" in md and "Closure rule" in md
+    cs = report.select_confirm(scored_path)
+    assert cs["arms"][:2] == ["A1", "A4"] and cs["questions"]
+    assert report.export_handcheck(scored_path, tmp_path / "hc.csv") >= 1
+
+
+def test_gemini_wrapper_builds_valid_config():
+    """Exercise the real GeminiLLM against a stub client (no network)."""
+    from harness.llm import GeminiLLM
+    from harness.prompts import VERIFY_SOURCES_DECL
+    from harness.registry import CHECK_LATEST_VERSION_DECL
+
+    seen = {}
+
+    class Models:
+        def generate_content(self, *, model, contents, config):
+            seen.update(model=model, config=config)
+            return types.GenerateContentResponse(
+                model_version="gemini-test",
+                candidates=[types.Candidate(content=types.Content(role="model", parts=[
+                    types.Part(text="thinking...", thought=True),
+                    types.Part(function_call=types.FunctionCall(id="a1", name="verify_sources", args={}),
+                               thought_signature=b"sig"),
+                ]))],
+                usage_metadata=types.GenerateContentResponseUsageMetadata(
+                    prompt_token_count=1000, candidates_token_count=100, thoughts_token_count=200))
+
+    class Client:
+        models = Models()
+
+    llm = GeminiLLM(model="gemini-3.8-flash", thinking_level="LOW", client=Client())
+    turn = llm.generate(system="s", contents=[types.Content(role="user", parts=[types.Part(text="q")])],
+                        function_decls=[CHECK_LATEST_VERSION_DECL, VERIFY_SOURCES_DECL], seed=1, tool_mode="NONE")
+    cfg = seen["config"]
+    assert cfg.temperature is None and cfg.seed == 1
+    assert cfg.automatic_function_calling.disable is True
+    assert cfg.thinking_config.thinking_level == types.ThinkingLevel.LOW
+    assert [f.name for f in cfg.tools[0].function_declarations] == ["check_latest_version", "verify_sources"]
+    assert turn.text == "" and turn.function_calls[0].id == "a1"
+    assert turn.content.parts[1].thought_signature == b"sig"   # kept for the next turn
+    assert turn.record["cost_usd"] == pytest.approx((1000 * 0.75 + 300 * 3.75) / 1e6)
+    json.dumps(turn.record)  # log record is serialisable
+
+
+def test_openrouter_judge_request_and_usage(monkeypatch, tmp_path):
+    """OpenRouter judge client against a mocked HTTP transport (no network)."""
+    import httpx
+
+    from harness.openrouter import OpenRouterLLM
+
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    sent, replies = [], [httpx.Response(429, json={"error": "rate limited"})]
+    labels = {"rationale": "r", "answer_matches": "alt", "flags": ["outdated"], "mentions_newer_version": True}
+
+    def handler(request):
+        sent.append(request)
+        if replies:
+            return replies.pop(0)
+        return httpx.Response(200, json={
+            "model": "openai/gpt-6-sol-20260922", "provider": "OpenAI",
+            "choices": [{"message": {"role": "assistant", "content": json.dumps(labels)}, "finish_reason": "stop"}],
+            "usage": {"prompt_tokens": 500, "completion_tokens": 120, "cost": 0.0022,
+                      "completion_tokens_details": {"reasoning_tokens": 80}}})
+
+    monkeypatch.setattr("harness.openrouter.time.sleep", lambda s: None)
+    llm = OpenRouterLLM(model=config.JUDGE_MODEL, reasoning_effort="low", transport=httpx.MockTransport(handler))
+    judge = scoring.Judge(llm, cache_dir=tmp_path)
+    out = judge.label(q_by_id("irs-03"), "The 2024 figure is $21,900, but these instructions may be outdated.")
+
+    assert out["labels"]["flags"] == ["outdated"] and out["cost_usd"] == 0.0022
+    assert out["usage"]["thoughts"] == 80 and out["usage"]["output"] == 40
+    body = json.loads(sent[-1].content)
+    assert len(sent) == 2  # retried after the 429
+    assert sent[-1].headers["authorization"] == "Bearer test-key"
+    assert body["model"] == config.JUDGE_MODEL and body["reasoning"] == {"effort": "low"}
+    assert body["response_format"]["json_schema"]["strict"] is True
+    assert [m["role"] for m in body["messages"]] == ["system", "user"]
+    assert "ANSWER TO LABEL" in body["messages"][1]["content"]
+    # cached: no second request
+    judge.label(q_by_id("irs-03"), "The 2024 figure is $21,900, but these instructions may be outdated.")
+    assert len(sent) == 2

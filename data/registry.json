@@ -1,0 +1,65 @@
+{
+  "_note": "Mock version registry standing in for an online lookup (design doc section 5). It's a frozen, controlled universe: each family only knows the versions used in this experiment, so 'latest' means latest within the experiment, not necessarily in the real world today (e.g. FY2026 per diem rates, pandas 3.x and the 2021 replacement of the NISPOM by 32 CFR Part 117 are deliberately left out). Verify each entry against the official source before the main sweep.",
+  "families": {
+    "IRS-1040-INSTR": {
+      "aliases": ["form 1040 instructions", "instructions for form 1040", "1040 instructions", "i1040gi", "i1040", "form 1040"],
+      "latest": "Tax Year 2025",
+      "versions": [
+        {"version": "Tax Year 2024", "aliases": ["2024", "ty2024", "tax year 2024"], "effective": "2024", "status": "superseded", "superseded_by": "Tax Year 2025"},
+        {"version": "Tax Year 2025", "aliases": ["2025", "ty2025", "tax year 2025"], "effective": "2025", "status": "current", "superseded_by": null}
+      ]
+    },
+    "NIST-SP-800-53": {
+      "aliases": ["nist sp 800-53", "sp 800-53", "800-53", "sp800-53", "nist.sp.800-53", "security and privacy controls"],
+      "latest": "Rev 5",
+      "versions": [
+        {"version": "Rev 4", "aliases": ["rev 4", "revision 4", "r4", "800-53r4", "rev. 4"], "effective": "2013-04-30", "status": "withdrawn", "withdrawn": "2021-09-23", "superseded_by": "Rev 5"},
+        {"version": "Rev 5", "aliases": ["rev 5", "revision 5", "r5", "800-53r5", "rev. 5"], "effective": "2020-09-23", "status": "current", "superseded_by": null,
+         "changes": [{"release": "5.1.1", "date": "2023-11-07", "summary": "Adds one new control and three control enhancements; editorial changes. The document keeps the Rev 5 designation."}]}
+      ]
+    },
+    "GSA-PER-DIEM": {
+      "aliases": ["gsa per diem", "per diem rates", "perdiem", "per diem"],
+      "latest": "FY2025",
+      "versions": [
+        {"version": "FY2024", "aliases": ["fy2024", "fy 2024", "fiscal year 2024", "2024"], "effective": "2023-10-01", "status": "superseded", "superseded_by": "FY2025"},
+        {"version": "FY2025", "aliases": ["fy2025", "fy 2025", "fiscal year 2025", "2025"], "effective": "2024-10-01", "status": "current", "superseded_by": null}
+      ]
+    },
+    "ARMY-FM-3-0": {
+      "aliases": ["fm 3-0", "fm3-0", "field manual 3-0"],
+      "latest": "2022",
+      "versions": [
+        {"version": "2017", "aliases": ["2017", "october 2017", "6 october 2017"], "effective": "2017-10-06", "status": "superseded", "superseded_by": "2022"},
+        {"version": "2022", "aliases": ["2022", "october 2022", "1 october 2022"], "effective": "2022-10-01", "status": "current", "superseded_by": null}
+      ]
+    },
+    "DOD-5220.22-M": {
+      "aliases": ["dod 5220.22-m", "5220.22-m", "nispom", "national industrial security program operating manual"],
+      "latest": "February 28, 2006 (incorporating Change 2)",
+      "versions": [
+        {"version": "February 28, 2006 (incorporating Change 2)", "aliases": ["2006", "february 28, 2006"], "effective": "2006-02-28", "status": "current", "superseded_by": null,
+         "changes": [
+           {"change": 1, "date": "2013-03-28", "summary": "Change 1 amends the manual in place; base date unchanged."},
+           {"change": 2, "date": "2016-05-18", "summary": "Change 2 amends the manual in place; base date unchanged."}
+         ]}
+      ]
+    },
+    "PANDAS-DOCS": {
+      "aliases": ["pandas", "pandas api reference", "pandas-docs", "pandas documentation"],
+      "latest": "2.0",
+      "versions": [
+        {"version": "1.5", "aliases": ["1.5", "1.5.0", "1.5.3", "v1.5"], "effective": "2022-09-19", "status": "superseded", "superseded_by": "2.0"},
+        {"version": "2.0", "aliases": ["2.0", "2.0.0", "v2.0"], "effective": "2023-04-03", "status": "current", "superseded_by": null}
+      ]
+    },
+    "NUMPY-DOCS": {
+      "aliases": ["numpy", "numpy reference", "numpy-docs", "numpy documentation"],
+      "latest": "2.0",
+      "versions": [
+        {"version": "1.26", "aliases": ["1.26", "1.26.0", "v1.26"], "effective": "2023-09-16", "status": "superseded", "superseded_by": "2.0"},
+        {"version": "2.0", "aliases": ["2.0", "2.0.0", "v2.0"], "effective": "2024-06-16", "status": "current", "superseded_by": null}
+      ]
+    }
+  }
+}
