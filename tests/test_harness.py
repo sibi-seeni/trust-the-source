@@ -239,14 +239,18 @@ def test_registry_unavailable_outcome():
 def test_pipeline_end_to_end(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "CACHE_DIR", tmp_path / "cache")
     qs = [q for q in QUESTIONS if q.pilot]
-    main = FakeLLM(lambda *a: ("The answer is $15,750 [1].", []))
-    jobs = [(q, a, 0, "normal") for q in qs for a in config.ARMS]
+    models = [FakeLLM(lambda *a: ("The answer is $15,750 [1].", []), model="fake-a"),
+              FakeLLM(lambda *a: ("It is $14,600 [2].", []), model="fake-b")]
+    jobs = runner.interleave(models, [(q, a, 0, "normal") for q in qs for a in config.ARMS])
+    assert [j[0].model for j in jobs[:4]] == ["fake-a", "fake-b", "fake-a", "fake-b"]
     out = tmp_path / "run" / "results.jsonl"
-    results = runner.run_jobs(main, jobs, CORPUS, REGISTRY, out, workers=2)
-    assert len(results) == len(jobs) and not any(r["error"] for r in results)
+    results = runner.run_jobs(jobs, CORPUS, REGISTRY, out, workers=2)
+    assert len(results) == len(jobs) == 2 * len(qs) * len(config.ARMS)
+    assert not any(r["error"] for r in results)
+    assert {r["model"] for r in results} == {"fake-a", "fake-b"}
 
     # second pass is served from cache
-    again = runner.run_jobs(main, jobs, CORPUS, REGISTRY, tmp_path / "run" / "again.jsonl", workers=2)
+    again = runner.run_jobs(jobs, CORPUS, REGISTRY, tmp_path / "run" / "again.jsonl", workers=2)
     assert all(r["from_cache"] for r in again)
 
     judge_llm = FakeLLM(lambda *a: (json.dumps({"rationale": "x", "answer_matches": "gold", "flags": [],
@@ -258,6 +262,7 @@ def test_pipeline_end_to_end(tmp_path, monkeypatch):
     scored_path.write_text("\n".join(json.dumps(s) for s in scored) + "\n")
     md = report.build_report(scored_path)
     assert "| A4 |" in md and "Closure rule" in md
+    assert "## fake-a" in md and "## fake-b" in md  # one table per model
     cs = report.select_confirm(scored_path)
     assert cs["arms"][:2] == ["A1", "A4"] and cs["questions"]
     assert report.export_handcheck(scored_path, tmp_path / "hc.csv") >= 1
@@ -348,9 +353,13 @@ def test_model_aliases_resolve():
     assert config.resolve("glm-5.3")["slug"] == "z-ai/glm-5.3-20260816"
     assert config.resolve("glm-5.3")["reasoning"] == "low"
     assert config.resolve("google/gemini-4-argon")["alias"] == "gemini-4-argon"
+    assert config.resolve(config.JUDGE_MODEL)["slug"] == "openai/gpt-6-luna-20260922"
+    assert config.resolve(config.JUDGE_MODEL)["reasoning"] == "high"
+    assert config.SWEEP_MODELS == ["deepseek-flash", "nemotron-3.5-super-vl"]
+    assert config.resolve("nemotron-3.5-super-vl")["slug"] == "nvidia/nemotron-3.5-super-vl-20261015"
     custom = config.resolve("someone/new-model")
     assert custom["slug"] == "someone/new-model" and custom["price"] is None
-    for alias in ("deepseek-flash", "glm-5.3", "gpt-6-luna", "gpt-6-sol", "gemini-4-argon", "gemini-3.8-flash"):
+    for alias in ("deepseek-flash", "nemotron-3.5-super-vl", "glm-5.3", "gpt-6-luna", "gpt-6-sol", "gemini-4-argon", "gemini-3.8-flash"):
         assert alias in config.MODELS
 
 
@@ -374,5 +383,5 @@ def test_estimate_table():
 
     plan = stage_runs(QUESTIONS)
     assert sum(r for _, r in plan["sweep"]) == len(QUESTIONS) * 8 * 3
-    md = estimate(QUESTIONS, ["deepseek-flash", "glm-5.3"], ["gpt-6-luna"], n_questions=90)
-    assert "| deepseek-flash |" in md and "gpt-6-luna" in md
+    md = estimate(QUESTIONS, config.SWEEP_MODELS, ["gpt-6-luna"], n_questions=90)
+    assert "| nemotron-3.5-super-vl |" in md and "gpt-6-luna (effort high" in md

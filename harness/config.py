@@ -22,13 +22,20 @@ MODELS = {
     # Budget tier: what the team is paying for now.
     "deepseek-flash": {"slug": "deepseek/deepseek-v4.1-flash-20260910", "price": (0.07, 0.50),
                        "reasoning": None, "tier": "budget"},
+    # Reasoning is on by default; OpenRouter routes tool-calling requests to the
+    # providers that support tools (3 of its 4).
+    "nemotron-3.5-super-vl": {"slug": "nvidia/nemotron-3.5-super-vl-20261015", "price": (0.10, 0.40),
+                              "reasoning": None, "tier": "budget"},
     # GLM 5.3 always reasons and defaults to effort "max", which multiplies output
     # tokens; "low" keeps it inside the budget. Set TTS_REASONING_EFFORT to override.
     "glm-5.3": {"slug": "z-ai/glm-5.3-20260816", "price": (1.40, 4.40),
                 "reasoning": "low", "tier": "budget"},
-    "gpt-6-luna": {"slug": "openai/gpt-6-luna", "price": (0.10, 0.50),
-                   "reasoning": "low", "tier": "budget"},
+    # The judge. High effort: labelling flags is the subtle part of the scoring.
+    "gpt-6-luna": {"slug": "openai/gpt-6-luna-20260922", "price": (0.10, 0.50),
+                   "reasoning": "high", "tier": "budget"},
     # Funded tier: the design doc's confirmation / judge models, kept for later.
+    # (A confirmation round isn't planned for this track, but `run --stage confirm
+    # --model <alias>` still works.)
     "gpt-6-sol": {"slug": "openai/gpt-6-sol-20260922", "price": (2.00, 10.00),
                   "reasoning": "low", "tier": "funded"},
     "gemini-4-argon": {"slug": "google/gemini-4-argon", "price": (2.00, 10.00),
@@ -37,16 +44,19 @@ MODELS = {
                          "reasoning": None, "tier": "funded"},
 }
 
-# Model under test, and the second budget model for the confirmation stage.
-MODEL = os.environ.get("TTS_MODEL", "deepseek-flash")
-CONFIRM_MODEL = os.environ.get("TTS_CONFIRM_MODEL", "glm-5.3")
-# The judge is GPT-6 Luna: cheap, and a different model family from both models
-# under test. Switch to gpt-6-sol once there's funding (TTS_JUDGE_MODEL=gpt-6-sol).
+# Models under test. Every stage runs all of them in parallel, and the report
+# gives each its own table. Comma-separated aliases or slugs.
+SWEEP_MODELS = os.environ.get("TTS_MODELS", "deepseek-flash,nemotron-3.5-super-vl").split(",")
+# The judge is GPT-6 Luna at high reasoning effort: cheap, and a different model
+# family from both models under test. Switch to gpt-6-sol once there's funding
+# (TTS_JUDGE_MODEL=gpt-6-sol).
 JUDGE_MODEL = os.environ.get("TTS_JUDGE_MODEL", "gpt-6-luna")
 # Dense half of hybrid retrieval, via OpenRouter's embeddings endpoint.
 EMBED_MODEL = os.environ.get("TTS_EMBED_MODEL", "openai/text-embedding-3-small")
-# Overrides every model's reasoning setting when set (e.g. "low", "high").
+# Override the reasoning setting from the table (e.g. "low", "high"): the first for
+# every model under test, the second for the judge only.
 REASONING_OVERRIDE = os.environ.get("TTS_REASONING_EFFORT") or None
+JUDGE_REASONING_OVERRIDE = os.environ.get("TTS_JUDGE_REASONING_EFFORT") or None
 
 
 def resolve(model: str) -> dict:
@@ -57,8 +67,6 @@ def resolve(model: str) -> dict:
         known = next((a for a, m in MODELS.items() if m["slug"] == model), None)
         m = {"alias": known or model, **(MODELS[known] if known else
                                          {"slug": model, "price": None, "reasoning": None, "tier": "custom"})}
-    if REASONING_OVERRIDE:
-        m["reasoning"] = REASONING_OVERRIDE
     return m
 
 

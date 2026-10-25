@@ -13,12 +13,13 @@ CALLS_PER_RUN = {"A0": 1, "A1": 1, "A2": 1, "A3": 2, "A4": 1, "A5": 3, "A6": 4, 
 # tool declarations and tool results push later turns higher. Output includes
 # reasoning tokens, which is what really swings the cost.
 SCENARIOS = {
-    "low": {"in": 1100, "out": 400, "judge_in": 900, "judge_out": 250},
-    "high": {"in": 1600, "out": 1500, "judge_in": 900, "judge_out": 600},
+    "low": {"in": 1100, "out": 400},
+    "high": {"in": 1600, "out": 1500},
 }
-
-CONFIRM_QUESTIONS = 40   # design doc step 3: failures + 25 stratified, ~40
-CONFIRM_ARMS = ["A1", "A4", "A3"]
+# Judge: ~900 prompt tokens (instructions + question + answer); output is a short
+# JSON label plus reasoning, which grows with the effort setting (low, high).
+JUDGE_IN = 900
+JUDGE_OUT = {"low": (250, 600), "medium": (500, 1200), "high": (1000, 2500), "default": (500, 1200)}
 
 
 def stage_runs(questions, n_questions=None) -> dict:
@@ -33,7 +34,6 @@ def stage_runs(questions, n_questions=None) -> dict:
         "sweep": [(a, n(len(questions)) * len(config.SEEDS)) for a in config.ARMS],
         "unavailable": [(a, n_c12) for a in config.REGISTRY_ARMS],
         "live": [("A3-web", n_live)],
-        "confirm": [(a, CONFIRM_QUESTIONS * 2) for a in CONFIRM_ARMS],
     }
 
 
@@ -62,8 +62,9 @@ def estimate(questions, models, judges, n_questions=None, profile=None) -> str:
     for scen_name, scen in scenarios.items():
         lines += [f"### {scen_name} scenario" + ("" if profile else
                   f" ({scen['in']} in / {scen['out']} out tokens per call)"), "",
-                  "| Model | $/1M in/out | " + " | ".join(stages) + " | Total (excl. confirm) |",
+                  "| Model | $/1M in/out | " + " | ".join(stages) + " | Total |",
                   "|---|---|" + "---|" * len(stages) + "---|"]
+        grand = 0.0
         for alias in models:
             p_in, p_out = config.resolve(alias)["price"]
             costs = []
@@ -74,18 +75,22 @@ def estimate(questions, models, judges, n_questions=None, profile=None) -> str:
                     calls = runs * prof["calls"]
                     c += calls * (prof["in"] * p_in + prof["out"] * p_out) / 1e6
                 costs.append(c)
-            total = sum(c for s, c in zip(stages, costs) if s != "confirm")
+            total = sum(costs)
+            grand += total
             lines.append(f"| {alias} | ${p_in}/${p_out} | " + " | ".join(f"${c:.2f}" for c in costs)
                          + f" | **${total:.2f}** |")
         lines.append("")
 
-        judged_runs = sum(runs for s in stages for _, runs in plan[s])
-        lines += [f"Judge, one call per run ({judged_runs} runs incl. confirm):", ""]
-        js = scen or SCENARIOS["low"]
+        judged_runs = len(models) * sum(runs for s in stages for _, runs in plan[s])
+        lines += [f"Judge, one call per run ({judged_runs} runs across {len(models)} models):", ""]
+        level = 0 if scen_name in ("low", "measured") else 1
         for alias in judges:
-            p_in, p_out = config.resolve(alias)["price"]
-            c = judged_runs * (js["judge_in"] * p_in + js["judge_out"] * p_out) / 1e6
-            lines.append(f"- {alias}: ${c:.2f}")
+            spec = config.resolve(alias)
+            effort = config.JUDGE_REASONING_OVERRIDE or spec["reasoning"] or "default"
+            out = JUDGE_OUT.get(effort, JUDGE_OUT["default"])[level]
+            c = judged_runs * (JUDGE_IN * spec["price"][0] + out * spec["price"][1]) / 1e6
+            lines.append(f"- {alias} (effort {effort}, ~{out} output tokens per label): ${c:.2f}"
+                         + (f" -> **all models + this judge: ${grand + c:.2f}**" if alias == judges[0] else ""))
         lines.append("")
     total_runs = {s: sum(r for _, r in plan[s]) for s in stages}
     lines.append("Runs per stage: " + ", ".join(f"{s} {n}" for s, n in total_runs.items())

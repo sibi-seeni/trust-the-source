@@ -49,10 +49,18 @@ def run_one(llm, q, arm, seed, condition, passages, registry_data) -> dict:
     }
 
 
-def run_jobs(llm, jobs, corpus, registry_data, out_path, embedder=None, workers=4, use_cache=True) -> list[dict]:
-    """jobs: list of (question, arm, seed, condition). Appends one JSON line per run to out_path."""
+def interleave(llms, jobs) -> list:
+    """(llm, question, arm, seed, condition) for every model, alternating models so
+    they all progress together instead of one finishing before the next starts."""
+    return [(llm, *job) for job in jobs for llm in llms]
+
+
+def run_jobs(jobs, corpus, registry_data, out_path, embedder=None, workers=4, use_cache=True) -> list[dict]:
+    """jobs: list of (llm, question, arm, seed, condition); see interleave(). Appends
+    one JSON line per run to out_path. Models run in parallel in one worker pool,
+    each with its own rate limiter."""
     retrieved = {}
-    for q, *_ in jobs:
+    for _, q, *_ in jobs:
         if q.id not in retrieved:
             retrieved[q.id] = retrieve(q, corpus.pool_for(q), embedder=embedder)
 
@@ -63,7 +71,7 @@ def run_jobs(llm, jobs, corpus, registry_data, out_path, embedder=None, workers=
     results = []
 
     def work(job):
-        q, arm, seed, condition = job
+        llm, q, arm, seed, condition = job
         passages = retrieved[q.id]
         key = job_key(llm.model, llm.reasoning_effort, arm, q.id, seed, condition, [p.pid for p in passages])
         cpath = cache_dir / f"{key}.json"
@@ -89,7 +97,7 @@ def run_jobs(llm, jobs, corpus, registry_data, out_path, embedder=None, workers=
             rec = fut.result()
             done += 1
             status = "ERROR" if rec["error"] else ("cached" if rec["from_cache"] else f"${rec['cost_usd'] or 0:.4f}")
-            print(f"[{done}/{len(jobs)}] {rec['arm']:6} {rec['qid']:10} seed={rec['seed']} "
+            print(f"[{done}/{len(jobs)}] {rec.get('model_alias', rec['model'])[:22]:22} {rec['arm']:6} {rec['qid']:10} seed={rec['seed']} "
                   f"{rec['condition']:20} calls={rec['n_calls']} {status}", flush=True)
             if rec["error"]:
                 print("   " + rec["error"].splitlines()[0], flush=True)

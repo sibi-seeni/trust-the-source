@@ -89,11 +89,13 @@ def _parse_args(raw) -> dict:
 
 
 class OpenRouterLLM:
-    def __init__(self, model: str = config.MODEL, rpm: float | None = None, attempts: int = 6,
-                 transport: httpx.BaseTransport | None = None):
+    def __init__(self, model: str, reasoning_effort: str | None = None, rpm: float | None = None,
+                 attempts: int = 6, transport: httpx.BaseTransport | None = None):
+        """`model` is an alias from config.MODELS or any OpenRouter slug. The reasoning
+        effort comes from the model table unless `reasoning_effort` overrides it."""
         spec = config.resolve(model)
         self.alias, self.model = spec["alias"], spec["slug"]
-        self.reasoning_effort = spec["reasoning"]
+        self.reasoning_effort = reasoning_effort or spec["reasoning"]
         self.attempts = attempts
         self.limiter = _RateLimiter(rpm)
         self.http = httpx.Client(base_url=BASE_URL, timeout=300, transport=transport, headers={
