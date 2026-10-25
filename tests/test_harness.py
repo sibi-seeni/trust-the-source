@@ -354,7 +354,7 @@ def test_model_aliases_resolve():
     assert config.resolve("glm-5.3")["reasoning"] == "low"
     assert config.resolve("google/gemini-4-argon")["alias"] == "gemini-4-argon"
     assert config.resolve(config.JUDGE_MODEL)["slug"] == "openai/gpt-6-luna-20260922"
-    assert config.resolve(config.JUDGE_MODEL)["reasoning"] == "high"
+    assert config.resolve(config.JUDGE_MODEL)["reasoning"] == "low"
     assert config.SWEEP_MODELS == ["deepseek-flash", "nemotron-3.5-super-vl"]
     assert config.resolve("nemotron-3.5-super-vl")["slug"] == "nvidia/nemotron-3.5-super-vl-20261015"
     custom = config.resolve("someone/new-model")
@@ -384,4 +384,4 @@ def test_estimate_table():
     plan = stage_runs(QUESTIONS)
     assert sum(r for _, r in plan["sweep"]) == len(QUESTIONS) * 8 * 3
     md = estimate(QUESTIONS, config.SWEEP_MODELS, ["gpt-6-luna"], n_questions=90)
-    assert "| nemotron-3.5-super-vl |" in md and "gpt-6-luna (effort high" in md
+    assert "| nemotron-3.5-super-vl |" in md and "gpt-6-luna (effort low" in md

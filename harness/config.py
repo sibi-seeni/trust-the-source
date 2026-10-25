@@ -30,9 +30,9 @@ MODELS = {
     # tokens; "low" keeps it inside the budget. Set TTS_REASONING_EFFORT to override.
     "glm-5.3": {"slug": "z-ai/glm-5.3-20260816", "price": (1.40, 4.40),
                 "reasoning": "low", "tier": "budget"},
-    # The judge. High effort: labelling flags is the subtle part of the scoring.
+    # The judge, at low effort to keep scoring cheap.
     "gpt-6-luna": {"slug": "openai/gpt-6-luna-20260922", "price": (0.10, 0.50),
-                   "reasoning": "high", "tier": "budget"},
+                   "reasoning": "low", "tier": "budget"},
     # Funded tier: the design doc's confirmation / judge models, kept for later.
     # (A confirmation round isn't planned for this track, but `run --stage confirm
     # --model <alias>` still works.)
@@ -47,7 +47,7 @@ MODELS = {
 # Models under test. Every stage runs all of them in parallel, and the report
 # gives each its own table. Comma-separated aliases or slugs.
 SWEEP_MODELS = os.environ.get("TTS_MODELS", "deepseek-flash,nemotron-3.5-super-vl").split(",")
-# The judge is GPT-6 Luna at high reasoning effort: cheap, and a different model
+# The judge is GPT-6 Luna at low reasoning effort: cheap, and a different model
 # family from both models under test. Switch to gpt-6-sol once there's funding
 # (TTS_JUDGE_MODEL=gpt-6-sol).
 JUDGE_MODEL = os.environ.get("TTS_JUDGE_MODEL", "gpt-6-luna")
