@@ -13,8 +13,8 @@ from .registry import MockRegistry
 from .retrieval import retrieve
 
 
-def job_key(model, thinking, arm, qid, seed, condition, retrieved) -> str:
-    blob = json.dumps([model, thinking or "default", arm, qid, seed, condition, config.PROMPT_VERSION, retrieved])
+def job_key(model, reasoning, arm, qid, seed, condition, retrieved) -> str:
+    blob = json.dumps([model, reasoning or "default", arm, qid, seed, condition, config.PROMPT_VERSION, retrieved])
     return hashlib.sha256(blob.encode()).hexdigest()[:24]
 
 
@@ -30,10 +30,10 @@ def run_one(llm, q, arm, seed, condition, passages, registry_data) -> dict:
         error = f"{type(e).__name__}: {e}\n{traceback.format_exc(limit=3)}"
     llm_calls = [e for e in ctx.trace if e["type"] == "llm_call"]
     usage = {k: sum(c["usage"].get(k, 0) for c in llm_calls)
-             for k in ("prompt", "output", "thoughts", "tool_use_prompt", "cached")}
+             for k in ("prompt", "output", "thoughts", "cached")}
     costs = [c["cost_usd"] for c in llm_calls]
     return {
-        "model": llm.model, "thinking_level": llm.thinking_level or "default",
+        "model": llm.model, "model_alias": llm.alias, "reasoning_effort": llm.reasoning_effort or "default",
         "arm": arm, "qid": q.id, "case": q.case, "family": q.family, "seed": seed, "condition": condition,
         "prompt_version": config.PROMPT_VERSION,
         "retrieved": [p.pid for p in passages],
@@ -49,10 +49,18 @@ def run_one(llm, q, arm, seed, condition, passages, registry_data) -> dict:
     }
 
 
-def run_jobs(llm, jobs, corpus, registry_data, out_path, embedder=None, workers=4, use_cache=True) -> list[dict]:
-    """jobs: list of (question, arm, seed, condition). Appends one JSON line per run to out_path."""
+def interleave(llms, jobs) -> list:
+    """(llm, question, arm, seed, condition) for every model, alternating models so
+    they all progress together instead of one finishing before the next starts."""
+    return [(llm, *job) for job in jobs for llm in llms]
+
+
+def run_jobs(jobs, corpus, registry_data, out_path, embedder=None, workers=4, use_cache=True) -> list[dict]:
+    """jobs: list of (llm, question, arm, seed, condition); see interleave(). Appends
+    one JSON line per run to out_path. Models run in parallel in one worker pool,
+    each with its own rate limiter."""
     retrieved = {}
-    for q, *_ in jobs:
+    for _, q, *_ in jobs:
         if q.id not in retrieved:
             retrieved[q.id] = retrieve(q, corpus.pool_for(q), embedder=embedder)
 
@@ -63,9 +71,9 @@ def run_jobs(llm, jobs, corpus, registry_data, out_path, embedder=None, workers=
     results = []
 
     def work(job):
-        q, arm, seed, condition = job
+        llm, q, arm, seed, condition = job
         passages = retrieved[q.id]
-        key = job_key(llm.model, llm.thinking_level, arm, q.id, seed, condition, [p.pid for p in passages])
+        key = job_key(llm.model, llm.reasoning_effort, arm, q.id, seed, condition, [p.pid for p in passages])
         cpath = cache_dir / f"{key}.json"
         if use_cache and cpath.exists():
             rec = json.loads(cpath.read_text())
@@ -89,7 +97,7 @@ def run_jobs(llm, jobs, corpus, registry_data, out_path, embedder=None, workers=
             rec = fut.result()
             done += 1
             status = "ERROR" if rec["error"] else ("cached" if rec["from_cache"] else f"${rec['cost_usd'] or 0:.4f}")
-            print(f"[{done}/{len(jobs)}] {rec['arm']:6} {rec['qid']:10} seed={rec['seed']} "
+            print(f"[{done}/{len(jobs)}] {rec.get('model_alias', rec['model'])[:22]:22} {rec['arm']:6} {rec['qid']:10} seed={rec['seed']} "
                   f"{rec['condition']:20} calls={rec['n_calls']} {status}", flush=True)
             if rec["error"]:
                 print("   " + rec["error"].splitlines()[0], flush=True)

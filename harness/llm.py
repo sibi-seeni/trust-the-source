@@ -1,46 +1,61 @@
-"""Thin wrapper around the Google Gen AI SDK (Gemini API / AI Studio).
+"""OpenRouter chat-completions client (OpenAI-compatible), used for every model:
+the model under test, the A6/A7 verifier and the judge.
 
-Function calling is handled manually (automatic function calling is off) so
-every request, tool call and response can be logged. The model's returned
-Content is appended to the history as-is, which keeps Gemini 3 thought
-signatures intact across tool-calling turns.
+Tool calling is handled manually so every request, tool call and response can be
+logged. The assistant message is appended to the history exactly as returned,
+including `reasoning_details`, which OpenRouter needs back to keep reasoning
+models (e.g. Gemini's thought signatures) consistent across tool-calling turns.
 """
 
+import json
+import os
 import threading
 import time
 from dataclasses import dataclass
 
-from google import genai
-from google.genai import types
+import httpx
 
 from . import config
 
-
-def make_client() -> genai.Client:
-    # Reads GEMINI_API_KEY (or GOOGLE_API_KEY) from the environment.
-    retry = types.HttpRetryOptions(attempts=6, initial_delay=2.0, max_delay=60.0,
-                                   http_status_codes=[408, 429, 500, 502, 503, 504])
-    return genai.Client(http_options=types.HttpOptions(retry_options=retry, timeout=180_000))
+BASE_URL = "https://openrouter.ai/api/v1"
+RETRY_STATUS = {408, 429, 500, 502, 503, 504}
 
 
-def dump(obj) -> dict | None:
-    return obj.model_dump(mode="json", exclude_none=True) if obj is not None else None
+def api_key() -> str:
+    key = os.environ.get("OPENROUTER_API_KEY")
+    if not key:
+        raise RuntimeError("Set OPENROUTER_API_KEY (create one at https://openrouter.ai/settings/keys).")
+    return key
 
 
-def cost_usd(usage: dict, model: str) -> float | None:
-    if model not in config.PRICES:
+def list_models() -> dict:
+    """slug -> entry from /api/v1/models (public, no key needed)."""
+    resp = httpx.get(f"{BASE_URL}/models", timeout=60)
+    resp.raise_for_status()
+    return {m["id"]: m for m in resp.json()["data"]}
+
+
+def cost_usd(usage: dict, slug: str) -> float | None:
+    price = config.price_for(slug)
+    if price is None:
         return None
-    p_in, p_out = config.PRICES[model]
-    tokens_in = usage.get("prompt", 0) + usage.get("tool_use_prompt", 0)
+    tokens_in = usage.get("prompt", 0)
     tokens_out = usage.get("output", 0) + usage.get("thoughts", 0)
-    return (tokens_in * p_in + tokens_out * p_out) / 1e6
+    return (tokens_in * price[0] + tokens_out * price[1]) / 1e6
+
+
+@dataclass
+class ToolCall:
+    id: str
+    name: str
+    args: dict
 
 
 @dataclass
 class LLMTurn:
-    content: types.Content
+    message: dict          # assistant message as returned, ready to append to the history
     text: str
-    function_calls: list
+    tool_calls: list
     usage: dict
     latency_s: float
     record: dict
@@ -63,69 +78,117 @@ class _RateLimiter:
             time.sleep(delay)
 
 
-class GeminiLLM:
-    def __init__(self, model: str = config.MODEL, thinking_level: str | None = config.THINKING_LEVEL,
-                 client: genai.Client | None = None, rpm: float | None = None):
-        self.model = model
-        self.thinking_level = thinking_level
-        self.client = client or make_client()
-        self.limiter = _RateLimiter(rpm)
+def _parse_args(raw) -> dict:
+    if isinstance(raw, dict):
+        return raw
+    try:
+        out = json.loads(raw or "{}")
+        return out if isinstance(out, dict) else {"_raw": raw}
+    except json.JSONDecodeError:
+        return {"_raw": raw, "_parse_error": True}
 
-    def generate(self, *, system: str, contents: list, function_decls: list | None = None,
-                 google_search: bool = False, seed: int | None = None,
-                 json_schema: dict | None = None, tool_mode: str | None = None) -> LLMTurn:
-        tools = []
-        if function_decls:
-            tools.append(types.Tool(function_declarations=[types.FunctionDeclaration(
-                name=d["name"], description=d["description"], parameters_json_schema=d.get("parameters"))
-                for d in function_decls]))
-        if google_search:
-            tools.append(types.Tool(google_search=types.GoogleSearch()))
-        cfg = types.GenerateContentConfig(
-            system_instruction=system,
-            seed=seed,
-            tools=tools or None,
-            automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True) if tools else None,
-            tool_config=(types.ToolConfig(function_calling_config=types.FunctionCallingConfig(mode=tool_mode))
-                         if tool_mode and function_decls else None),
-            thinking_config=types.ThinkingConfig(thinking_level=self.thinking_level) if self.thinking_level else None,
-            response_mime_type="application/json" if json_schema else None,
-            response_json_schema=json_schema,
-        )
+
+class OpenRouterLLM:
+    def __init__(self, model: str, reasoning_effort: str | None = None, rpm: float | None = None,
+                 attempts: int = 6, transport: httpx.BaseTransport | None = None):
+        """`model` is an alias from config.MODELS or any OpenRouter slug. The reasoning
+        effort comes from the model table unless `reasoning_effort` overrides it."""
+        spec = config.resolve(model)
+        self.alias, self.model = spec["alias"], spec["slug"]
+        self.reasoning_effort = reasoning_effort or spec["reasoning"]
+        self.attempts = attempts
+        self.limiter = _RateLimiter(rpm)
+        self.http = httpx.Client(base_url=BASE_URL, timeout=300, transport=transport, headers={
+            "Authorization": f"Bearer {api_key()}",
+            "X-Title": "trust-the-source",
+        })
+
+    def generate(self, *, system: str, messages: list, tools: list | None = None,
+                 web_search: bool = False, seed: int | None = None,
+                 json_schema: dict | None = None, tool_choice: str | None = None) -> LLMTurn:
+        """`tools` are {"name", "description", "parameters"?} declarations."""
+        body = {"model": self.model, "messages": [{"role": "system", "content": system}, *messages],
+                "temperature": config.TEMPERATURE, "seed": seed}
+        tool_list = [{"type": "function", "function": {
+            "name": d["name"], "description": d["description"],
+            "parameters": d.get("parameters", {"type": "object", "properties": {}})}} for d in tools or []]
+        if web_search:
+            tool_list.append({"type": "openrouter:web_search"})
+        if tool_list:
+            body["tools"] = tool_list
+            if tool_choice:
+                body["tool_choice"] = tool_choice
+        if self.reasoning_effort:
+            body["reasoning"] = {"effort": self.reasoning_effort}
+        if json_schema:
+            body["response_format"] = {"type": "json_schema", "json_schema": {
+                "name": "output", "strict": True, "schema": json_schema}}
+
         self.limiter.wait()
         t0 = time.monotonic()
-        resp = self.client.models.generate_content(model=self.model, contents=contents, config=cfg)
+        data = self._post(body)
         latency = time.monotonic() - t0
 
-        cand = resp.candidates[0] if resp.candidates else None
-        content = cand.content if cand is not None and cand.content is not None else types.Content(role="model", parts=[])
-        content.role = content.role or "model"
-        parts = content.parts or []
-        text = "".join(p.text for p in parts if p.text and not p.thought)
-        calls = [p.function_call for p in parts if p.function_call]
-        um = resp.usage_metadata
+        choice = data["choices"][0]
+        msg = dict(choice.get("message") or {})
+        msg["role"] = "assistant"
+        text = msg.get("content") or ""
+        calls = [ToolCall(id=tc.get("id") or f"call_{i}", name=tc["function"]["name"],
+                          args=_parse_args(tc["function"].get("arguments")))
+                 for i, tc in enumerate(msg.get("tool_calls") or []) if tc.get("type", "function") == "function"]
+        u = data.get("usage") or {}
+        reasoning = (u.get("completion_tokens_details") or {}).get("reasoning_tokens") or 0
         usage = {
-            "prompt": (um.prompt_token_count or 0) if um else 0,
-            "output": (um.candidates_token_count or 0) if um else 0,
-            "thoughts": (um.thoughts_token_count or 0) if um else 0,
-            "tool_use_prompt": (um.tool_use_prompt_token_count or 0) if um else 0,
-            "cached": (um.cached_content_token_count or 0) if um else 0,
+            "prompt": u.get("prompt_tokens", 0),
+            # completion_tokens includes reasoning tokens; split them out.
+            "output": max(u.get("completion_tokens", 0) - reasoning, 0),
+            "thoughts": reasoning,
+            "cached": (u.get("prompt_tokens_details") or {}).get("cached_tokens", 0),
         }
+        # OpenRouter's reported cost includes things the token table can't see (web search fees).
+        cost = u.get("cost") if u.get("cost") is not None else cost_usd(usage, self.model)
         record = {
             "model": self.model,
-            "model_version": resp.model_version,
-            "config": {"seed": seed, "thinking_level": self.thinking_level or "default",
-                       "tools": [d["name"] for d in function_decls or []] + (["google_search"] if google_search else []),
-                       "tool_mode": tool_mode, "json_schema": bool(json_schema)},
-            "system": system,
-            "request_contents": [dump(c) for c in contents],
-            "response_content": dump(content),
-            "finish_reason": str(cand.finish_reason) if cand is not None and cand.finish_reason else None,
-            "grounding_metadata": dump(cand.grounding_metadata) if cand is not None else None,
-            "prompt_feedback": dump(resp.prompt_feedback),
+            "model_version": data.get("model"),
+            "provider": data.get("provider"),
+            "config": {"seed": seed, "temperature": config.TEMPERATURE,
+                       "reasoning_effort": self.reasoning_effort or "default",
+                       "tools": [d["name"] for d in tools or []] + (["openrouter:web_search"] if web_search else []),
+                       "tool_choice": tool_choice, "json_schema": bool(json_schema)},
+            "request_messages": body["messages"],
+            "response_message": msg,
+            "finish_reason": choice.get("finish_reason"),
             "usage": usage,
-            "cost_usd": cost_usd(usage, self.model),
+            "cost_usd": cost,
             "latency_s": round(latency, 3),
         }
-        return LLMTurn(content=content, text=text, function_calls=calls, usage=usage,
-                       latency_s=latency, record=record)
+        return LLMTurn(message=msg, text=text, tool_calls=calls, usage=usage, latency_s=latency, record=record)
+
+    def _post(self, body: dict) -> dict:
+        delay = 2.0
+        for attempt in range(self.attempts):
+            last = attempt == self.attempts - 1
+            try:
+                resp = self.http.post("/chat/completions", json=body)
+            except httpx.TransportError:
+                if last:
+                    raise
+                time.sleep(delay)
+                delay = min(delay * 2, 60)
+                continue
+            if resp.status_code in RETRY_STATUS and not last:
+                time.sleep(float(resp.headers.get("retry-after") or delay))
+                delay = min(delay * 2, 60)
+                continue
+            if resp.status_code >= 400:
+                raise RuntimeError(f"OpenRouter {resp.status_code}: {resp.text[:500]}")
+            data = resp.json()
+            # OpenRouter can return 200 with an error object (e.g. an upstream provider failed).
+            if "error" in data and not data.get("choices"):
+                if last:
+                    raise RuntimeError(f"OpenRouter error: {data['error']}")
+                time.sleep(delay)
+                delay = min(delay * 2, 60)
+                continue
+            return data
+        raise RuntimeError("unreachable")

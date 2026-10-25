@@ -9,17 +9,15 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
 
-from google.genai import types
-
 from . import arms, config
 from .data import Corpus, load_questions, load_registry
-from .llm import GeminiLLM, make_client
-from .openrouter import OpenRouterLLM, get_model_info
+from .estimate import estimate, measured_profile
+from .llm import OpenRouterLLM, list_models
 from .registry import CHECK_LATEST_VERSION_DECL
 from .report import build_report, export_handcheck, latest_per_job, load_jsonl, select_confirm
-from .retrieval import GeminiEmbedder
-from .runner import run_jobs
-from .scoring import Judge, score_record
+from .retrieval import OpenRouterEmbedder
+from .runner import interleave, run_jobs
+from .scoring import JUDGE_SCHEMA, Judge, score_record
 
 STAGES = {
     # stage: (question filter, arms, seeds, condition)
@@ -31,16 +29,9 @@ STAGES = {
 }
 
 
-def _require_key(judge: bool = False):
-    if not (os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")):
-        sys.exit("Set GEMINI_API_KEY (create one at https://aistudio.google.com/apikey).")
-    if judge and not os.environ.get("OPENROUTER_API_KEY"):
-        sys.exit("Set OPENROUTER_API_KEY for the judge (create one at https://openrouter.ai/settings/keys), "
-                 "or pass --no-score.")
-
-
-def make_judge_llm() -> OpenRouterLLM:
-    return OpenRouterLLM(model=config.JUDGE_MODEL, reasoning_effort=config.JUDGE_REASONING_EFFORT)
+def _require_key():
+    if not os.environ.get("OPENROUTER_API_KEY"):
+        sys.exit("Set OPENROUTER_API_KEY (create one at https://openrouter.ai/settings/keys).")
 
 
 def _git_commit():
@@ -51,69 +42,89 @@ def _git_commit():
         return None
 
 
-def cmd_preflight(args):
-    """Fail fast: models exist, function calling round-trips, the judge returns schema JSON."""
-    _require_key(judge=True)
-    client = make_client()
-    ok = True
-    m = client.models.get(model=args.model)
-    actions = m.supported_actions or []
-    print(f"{args.model}: version={m.version} input_limit={m.input_token_limit} thinking={m.thinking} actions={actions}")
-    if "generateContent" not in actions:
-        print(f"  FAIL: {args.model} doesn't list generateContent")
-        ok = False
+def make_judge_llm() -> OpenRouterLLM:
+    return OpenRouterLLM(model=config.JUDGE_MODEL, reasoning_effort=config.JUDGE_REASONING_OVERRIDE)
 
-    llm = GeminiLLM(model=args.model, client=client)
-    contents = [types.Content(role="user", parts=[types.Part(text=(
-        "Use check_latest_version to look up 'NIST SP 800-53 Rev 4', then tell me its status in one sentence."))])]
-    turn = llm.generate(system="You are a helpful assistant.", contents=contents,
-                        function_decls=[CHECK_LATEST_VERSION_DECL], seed=0)
-    if not turn.function_calls:
-        print(f"  FAIL: no function call returned (text: {turn.text[:200]!r})")
-        ok = False
-    else:
-        fc = turn.function_calls[0]
-        print(f"tool call OK: {fc.name}({dict(fc.args or {})}) id={fc.id}")
-        contents += [turn.content, types.Content(role="user", parts=[types.Part(function_response=types.FunctionResponse(
-            id=fc.id, name=fc.name,
-            response={"family": "NIST-SP-800-53", "version": "Rev 4", "status": "withdrawn", "latest": "Rev 5"}))])]
-        turn2 = llm.generate(system="You are a helpful assistant.", contents=contents,
-                             function_decls=[CHECK_LATEST_VERSION_DECL], seed=0)
-        print(f"tool round-trip OK: {turn2.text.strip()[:160]!r}")
-        print(f"usage: {turn.usage} / {turn2.usage}; cost ${(turn.record['cost_usd'] or 0) + (turn2.record['cost_usd'] or 0):.5f}")
 
-    info = get_model_info(config.JUDGE_MODEL)
+def _check_listing(alias, listing, need):
+    """Design doc section 10: the model must be listed and support what we need."""
+    spec = config.resolve(alias)
+    info = listing.get(spec["slug"])
     if info is None:
-        print(f"  FAIL: judge model {config.JUDGE_MODEL} isn't listed on OpenRouter /api/v1/models")
-        ok = False
-    else:
-        params = info.get("supported_parameters") or []
-        print(f"judge {config.JUDGE_MODEL}: pricing={info.get('pricing', {}).get('prompt')}/"
-              f"{info.get('pricing', {}).get('completion')} per token; structured outputs="
-              f"{'structured_outputs' in params}; reasoning={'reasoning' in params}")
-        if "structured_outputs" not in params and "response_format" not in params:
-            print("  FAIL: judge model doesn't list structured_outputs / response_format")
+        print(f"  FAIL {alias}: {spec['slug']} isn't listed on OpenRouter /api/v1/models")
+        return False
+    params = set(info.get("supported_parameters") or [])
+    pr = info.get("pricing") or {}
+    live = (float(pr.get("prompt") or 0) * 1e6, float(pr.get("completion") or 0) * 1e6)
+    table = spec["price"]
+    note = "" if table and all(abs(a - b) < 1e-6 for a, b in zip(live, table)) else f"  (config table says {table})"
+    print(f"{alias} -> {spec['slug']}: ${live[0]:.2f}/${live[1]:.2f} per 1M{note}; "
+          f"reasoning={'reasoning' in params} effort={spec['reasoning'] or 'default'}")
+    missing = [n for n in need if not ({n} if isinstance(n, str) else set(n)) & params]
+    for n in missing:
+        print(f"  FAIL {alias}: supported_parameters lacks {n}")
+    return not missing
+
+
+def cmd_preflight(args):
+    """Fail fast before spending: models are listed with tool / JSON support, a tool
+    call round-trips, the judge returns schema JSON, embeddings work."""
+    _require_key()
+    listing = list_models()
+    models = args.models.split(",") if args.models else config.SWEEP_MODELS
+    ok = all([_check_listing(m, listing, ["tools", "tool_choice"]) for m in models])
+    ok &= _check_listing(config.JUDGE_MODEL, listing, [("structured_outputs", "response_format")])
+    if not ok:
+        sys.exit(1)
+
+    for alias in models:
+        llm = OpenRouterLLM(model=alias, reasoning_effort=config.REASONING_OVERRIDE)
+        sys_msg = "You are a helpful assistant."
+        messages = [{"role": "user", "content": (
+            "Use check_latest_version to look up 'NIST SP 800-53 Rev 4', then tell me its status in one sentence.")}]
+        turn = llm.generate(system=sys_msg, messages=messages, tools=[CHECK_LATEST_VERSION_DECL], seed=0)
+        if not turn.tool_calls:
+            print(f"  FAIL {alias}: no tool call returned (text: {turn.text[:200]!r})")
             ok = False
+            continue
+        tc = turn.tool_calls[0]
+        messages += [turn.message, {"role": "tool", "tool_call_id": tc.id, "content": json.dumps(
+            {"family": "NIST-SP-800-53", "version": "Rev 4", "status": "withdrawn", "latest": "Rev 5"})}]
+        turn2 = llm.generate(system=sys_msg, messages=messages, tools=[CHECK_LATEST_VERSION_DECL], seed=0)
+        cost = (turn.record["cost_usd"] or 0) + (turn2.record["cost_usd"] or 0)
+        print(f"{alias}: tool round-trip OK via {turn.record['provider']} ({turn.record['model_version']}): "
+              f"{turn2.text.strip()[:120]!r} | ${cost:.5f}")
+
     jt = make_judge_llm().generate(
-        system="Reply in JSON.", seed=0,
-        contents=[types.Content(role="user", parts=[types.Part(text="Is 2+2 equal to 4?")])],
-        json_schema={"type": "object", "properties": {"yes": {"type": "boolean"}}, "required": ["yes"],
-                     "additionalProperties": False})
+        system="You label answers.", seed=0,
+        messages=[{"role": "user", "content": "QUESTION: What is 2+2?\nREFERENCE answer: 4\nALTERNATIVE answer: 5\n"
+                                              "ANSWER TO LABEL:\nIt's 4."}],
+        json_schema=JUDGE_SCHEMA)
     try:
-        print(f"judge JSON OK: {json.loads(jt.text)} (served by {jt.record['model_version']}, "
-              f"${jt.record['cost_usd'] or 0:.5f})")
+        print(f"judge {config.JUDGE_MODEL}: JSON OK {json.loads(jt.text)} via {jt.record['provider']}, "
+              f"${jt.record['cost_usd'] or 0:.5f}")
     except json.JSONDecodeError:
-        print(f"  FAIL: judge didn't return JSON: {jt.text[:200]!r}")
+        print(f"  FAIL judge didn't return JSON: {jt.text[:200]!r}")
         ok = False
 
     if args.retrieval == "hybrid":
-        vec = GeminiEmbedder(client).embed(["preflight check"])
+        vec = OpenRouterEmbedder(make_judge_llm().http).embed(["preflight check"])
         print(f"embeddings OK: {config.EMBED_MODEL} dim={vec.shape[1]}")
     sys.exit(0 if ok else 1)
 
 
+def cmd_estimate(args):
+    questions = load_questions()
+    models = args.models.split(",") if args.models else config.SWEEP_MODELS
+    judges = args.judges.split(",") if args.judges else [config.JUDGE_MODEL, "gpt-6-sol"]
+    profile = measured_profile(_run_dir(args.from_run) / "results.jsonl") if args.from_run else None
+    n = args.questions or len(questions)
+    print(f"# Cost estimate ({n} questions{', measured from ' + args.from_run if args.from_run else ''})\n")
+    print(estimate(questions, models, judges, n_questions=args.questions, profile=profile))
+
+
 def cmd_run(args):
-    _require_key(judge=not args.no_score)
+    _require_key()
     questions = load_questions()
     qfilter, stage_arms, seeds, condition = STAGES[args.stage]
     if args.stage == "confirm":
@@ -134,24 +145,35 @@ def cmd_run(args):
         print(f"WARNING: {len(unverified)} questions still have verified=false. Verify gold answers "
               "and freeze data/ in Git before the main sweep.")
 
-    jobs = [(q, a, s, condition) for q in selected for a in arm_list for s in seed_list]
+    if args.stage == "confirm" and not args.models:
+        sys.exit("--stage confirm needs --models (no confirmation model is configured for this track).")
+    # One client per model, each with its own rate limiter; their jobs share one worker pool.
+    llms = [OpenRouterLLM(model=m, reasoning_effort=config.REASONING_OVERRIDE, rpm=args.rpm)
+            for m in (args.models.split(",") if args.models else config.SWEEP_MODELS)]
+    base_jobs = [(q, a, s, condition) for q in selected for a in arm_list for s in seed_list]
+    jobs = interleave(llms, base_jobs)
+    judge = make_judge_llm() if not args.no_score else None
     name = args.name or f"{args.stage}-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
     run_dir = config.RUNS_DIR / name
     run_dir.mkdir(parents=True, exist_ok=True)
     (run_dir / "meta.json").write_text(json.dumps({
-        "stage": args.stage, "model": args.model, "thinking_level": config.THINKING_LEVEL or "default",
-        "judge_model": config.JUDGE_MODEL, "judge_reasoning_effort": config.JUDGE_REASONING_EFFORT,
+        "stage": args.stage,
+        "models": [{"alias": m.alias, "slug": m.model, "reasoning_effort": m.reasoning_effort or "default"}
+                   for m in llms],
+        "temperature": config.TEMPERATURE,
+        "judge_model": config.resolve(config.JUDGE_MODEL)["slug"],
+        "judge_reasoning_effort": (judge.reasoning_effort if judge else
+                                   config.JUDGE_REASONING_OVERRIDE or config.resolve(config.JUDGE_MODEL)["reasoning"]),
         "embed_model": config.EMBED_MODEL if args.retrieval == "hybrid" else None,
         "retrieval": args.retrieval, "arms": arm_list, "seeds": seed_list, "condition": condition,
         "questions": [q.id for q in selected], "prompt_version": config.PROMPT_VERSION,
         "git_commit": _git_commit(), "started": datetime.now().isoformat(),
     }, indent=2))
-    print(f"{len(jobs)} runs ({len(selected)} questions x {len(arm_list)} arms x {len(seed_list)} seeds) -> {run_dir}")
+    print(f"{len(jobs)} runs ({len(selected)} questions x {len(arm_list)} arms x {len(seed_list)} seeds "
+          f"x {len(llms)} models: {', '.join(m.alias for m in llms)}) -> {run_dir}")
 
-    client = make_client()
-    llm = GeminiLLM(model=args.model, client=client, rpm=args.rpm)
-    embedder = GeminiEmbedder(client) if args.retrieval == "hybrid" else None
-    run_jobs(llm, jobs, Corpus(), load_registry(), run_dir / "results.jsonl",
+    embedder = OpenRouterEmbedder(llms[0].http) if args.retrieval == "hybrid" else None
+    run_jobs(jobs, Corpus(), load_registry(), run_dir / "results.jsonl",
              embedder=embedder, workers=args.workers, use_cache=not args.no_cache)
     if not args.no_score:
         score(run_dir, args.workers)
@@ -172,8 +194,7 @@ def score(run_dir, workers=4):
 
 
 def cmd_score(args):
-    if not os.environ.get("OPENROUTER_API_KEY"):
-        sys.exit("Set OPENROUTER_API_KEY for the judge (create one at https://openrouter.ai/settings/keys).")
+    _require_key()
     score(_run_dir(args.run), workers=args.workers)
 
 
@@ -207,25 +228,33 @@ def main(argv=None):
     p = argparse.ArgumentParser(prog="python -m harness")
     sub = p.add_subparsers(dest="cmd", required=True)
 
-    pf = sub.add_parser("preflight", help="check the model, tool calling and JSON output before spending money")
-    pf.add_argument("--model", default=config.MODEL)
+    pf = sub.add_parser("preflight", help="check the models, tool calling and JSON output before spending money")
+    pf.add_argument("--models", help=f"comma-separated aliases or slugs (default: {','.join(config.SWEEP_MODELS)})")
     pf.add_argument("--retrieval", choices=["hybrid", "bm25"], default="hybrid")
     pf.set_defaults(func=cmd_preflight)
 
     pr = sub.add_parser("run", help="run a stage, then score it")
     pr.add_argument("--stage", choices=list(STAGES), required=True)
-    pr.add_argument("--model", default=config.MODEL)
+    pr.add_argument("--models", help=f"comma-separated aliases ({', '.join(config.MODELS)}) or OpenRouter slugs, "
+                                     f"run in parallel (default: {','.join(config.SWEEP_MODELS)})")
     pr.add_argument("--arms", help="comma-separated, e.g. A0,A4 (default: the stage's arms)")
     pr.add_argument("--seeds", help="comma-separated, e.g. 0,1,2")
     pr.add_argument("--questions", help="comma-separated question ids to restrict to")
     pr.add_argument("--confirm-set", default=str(config.DATA_DIR / "confirm_set.json"))
     pr.add_argument("--name", help="run directory name under runs/")
-    pr.add_argument("--workers", type=int, default=4)
-    pr.add_argument("--rpm", type=float, default=None, help="cap on requests per minute (match your AI Studio tier)")
+    pr.add_argument("--workers", type=int, default=8, help="parallel runs across all models")
+    pr.add_argument("--rpm", type=float, default=None, help="cap on requests per minute, per model")
     pr.add_argument("--retrieval", choices=["hybrid", "bm25"], default="hybrid")
     pr.add_argument("--no-cache", action="store_true")
     pr.add_argument("--no-score", action="store_true")
     pr.set_defaults(func=cmd_run)
+
+    pe = sub.add_parser("estimate", help="estimate cost per stage and model (no API calls)")
+    pe.add_argument("--models", help=f"comma-separated aliases (default: {','.join(config.SWEEP_MODELS)})")
+    pe.add_argument("--judges", help=f"comma-separated aliases (default: {config.JUDGE_MODEL},gpt-6-sol)")
+    pe.add_argument("--questions", type=int, help="scale to this many questions (e.g. 90)")
+    pe.add_argument("--from-run", help="use measured tokens and calls from this run (e.g. the pilot)")
+    pe.set_defaults(func=cmd_estimate)
 
     ps = sub.add_parser("score", help="(re)score a run from its results.jsonl")
     ps.add_argument("--run", required=True)
