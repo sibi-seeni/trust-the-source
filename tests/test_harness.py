@@ -5,11 +5,10 @@ import json
 import re
 
 import pytest
-from google.genai import types
 
 from harness import arms, config, report, runner, scoring
 from harness.data import Corpus, load_questions, load_registry
-from harness.llm import LLMTurn
+from harness.llm import LLMTurn, ToolCall
 from harness.registry import MockRegistry
 from harness.retrieval import retrieve
 
@@ -19,26 +18,24 @@ REGISTRY = load_registry()
 
 
 class FakeLLM:
-    """Calls `script(system, contents, decls, kwargs)` -> (text, [(name, args), ...])."""
+    """Calls `script(system, messages, tool_names, kwargs)` -> (text, [(name, args), ...])."""
 
     def __init__(self, script, model="fake-model"):
-        self.script, self.model, self.thinking_level = script, model, None
+        self.script, self.model, self.alias, self.reasoning_effort = script, model, model, None
         self.calls = []
 
-    def generate(self, *, system, contents, function_decls=None, **kw):
-        self.calls.append({"system": system, "contents": list(contents),
-                           "decls": [d["name"] for d in function_decls or []], **kw})
-        text, fcalls = self.script(system, contents, [d["name"] for d in function_decls or []], kw)
-        parts = [types.Part(function_call=types.FunctionCall(id=f"call-{i}", name=n, args=a))
-                 for i, (n, a) in enumerate(fcalls)]
-        if text:
-            parts.append(types.Part(text=text))
-        content = types.Content(role="model", parts=parts)
-        usage = {"prompt": 100, "output": 10, "thoughts": 5, "tool_use_prompt": 0, "cached": 0}
-        record = {"model": self.model, "model_version": "fake-1", "usage": usage, "cost_usd": 0.001,
-                  "latency_s": 0.0, "response_content": content.model_dump(mode="json", exclude_none=True)}
-        return LLMTurn(content=content, text=text, function_calls=[p.function_call for p in parts if p.function_call],
-                       usage=usage, latency_s=0.0, record=record)
+    def generate(self, *, system, messages, tools=None, **kw):
+        names = [d["name"] for d in tools or []]
+        self.calls.append({"system": system, "messages": list(messages), "decls": names, **kw})
+        text, fcalls = self.script(system, messages, names, kw)
+        calls = [ToolCall(id=f"call-{i}", name=n, args=a) for i, (n, a) in enumerate(fcalls)]
+        message = {"role": "assistant", "content": text or None,
+                   "tool_calls": [{"id": c.id, "type": "function",
+                                   "function": {"name": c.name, "arguments": json.dumps(c.args)}} for c in calls] or None}
+        usage = {"prompt": 100, "output": 10, "thoughts": 5, "cached": 0}
+        record = {"model": self.model, "model_version": "fake-1", "provider": "fake", "usage": usage,
+                  "cost_usd": 0.001, "latency_s": 0.0, "response_message": message}
+        return LLMTurn(message=message, text=text, tool_calls=calls, usage=usage, latency_s=0.0, record=record)
 
 
 def q_by_id(qid):
@@ -128,7 +125,7 @@ def test_a0_has_no_freshness_line_and_a1_does():
 def test_a2_shows_metadata():
     llm = FakeLLM(lambda *a: ("answer", []))
     arms.a2_metadata(ctx_for(q_by_id("nist-03"), llm))
-    user_text = llm.calls[0]["contents"][0].parts[0].text
+    user_text = llm.calls[0]["messages"][0]["content"]
     assert "status=withdrawn" in user_text
 
 
@@ -141,14 +138,16 @@ def test_a3_tool_loop_returns_matching_function_response():
     ctx = ctx_for(q_by_id("nist-03"), llm)
     answer = arms.a3_tool(ctx)
     assert answer.startswith("Rev 4 is withdrawn")
-    fr = llm.calls[1]["contents"][-1].parts[0].function_response
-    assert fr.id == "call-0" and fr.name == "check_latest_version" and fr.response["status"] == "withdrawn"
+    tool_msg = llm.calls[1]["messages"][-1]
+    assert tool_msg["role"] == "tool" and tool_msg["tool_call_id"] == "call-0"
+    assert json.loads(tool_msg["content"])["status"] == "withdrawn"
+    assert llm.calls[1]["messages"][1]["tool_calls"][0]["id"] == "call-0"   # assistant turn echoed back
     assert arms.registry_was_checked(ctx.trace)
 
 
 def test_a3_forces_final_answer_after_max_steps():
-    llm = FakeLLM(lambda s, c, d, kw: ("final" if kw.get("tool_mode") == "NONE" else "",
-                                       [] if kw.get("tool_mode") == "NONE" else [("check_latest_version", {"title_or_id": "x"})]))
+    llm = FakeLLM(lambda s, c, d, kw: ("final" if kw.get("tool_choice") == "none" else "",
+                                       [] if kw.get("tool_choice") == "none" else [("check_latest_version", {"title_or_id": "x"})]))
     assert arms.a3_tool(ctx_for(q_by_id("irs-01"), llm)) == "final"
     assert len(llm.calls) == config.MAX_TOOL_STEPS + 1
 
@@ -158,7 +157,7 @@ def test_a4_annotates_every_passage_without_model_tools():
     ctx = ctx_for(q_by_id("irs-03"), llm)
     arms.a4_forced_check(ctx)
     assert llm.calls[0]["decls"] == []
-    assert llm.calls[0]["contents"][0].parts[0].text.count("Registry check:") == len(ctx.passages)
+    assert llm.calls[0]["messages"][0]["content"].count("Registry check:") == len(ctx.passages)
     assert arms.registry_was_checked(ctx.trace)
 
 
@@ -175,7 +174,7 @@ def test_a5_skill_unlocks_registry_tool():
     arms.a5_skill(ctx)
     assert llm.calls[0]["decls"] == ["load_skill"]
     assert "check_latest_version" in llm.calls[1]["decls"]
-    skill_reply = llm.calls[1]["contents"][-1].parts[0].function_response.response
+    skill_reply = json.loads(llm.calls[1]["messages"][-1]["content"])
     assert "Version check" in skill_reply["skill"]
     assert arms.registry_was_checked(ctx.trace)
 
@@ -196,7 +195,7 @@ def test_a6_and_a7_run_verifier():
         roles = [e["role"] for e in ctx.trace if e["type"] == "llm_call"]
         assert "verifier" in roles and "main" in roles
         assert arms.registry_was_checked(ctx.trace)
-    final_prompt = llm.calls[-1]["contents"][0].parts[0].text
+    final_prompt = llm.calls[-1]["messages"][0]["content"]
     assert "Source verification report" in final_prompt and "withdrawn" in final_prompt
 
 
@@ -264,49 +263,11 @@ def test_pipeline_end_to_end(tmp_path, monkeypatch):
     assert report.export_handcheck(scored_path, tmp_path / "hc.csv") >= 1
 
 
-def test_gemini_wrapper_builds_valid_config():
-    """Exercise the real GeminiLLM against a stub client (no network)."""
-    from harness.llm import GeminiLLM
-    from harness.prompts import VERIFY_SOURCES_DECL
-    from harness.registry import CHECK_LATEST_VERSION_DECL
-
-    seen = {}
-
-    class Models:
-        def generate_content(self, *, model, contents, config):
-            seen.update(model=model, config=config)
-            return types.GenerateContentResponse(
-                model_version="gemini-test",
-                candidates=[types.Candidate(content=types.Content(role="model", parts=[
-                    types.Part(text="thinking...", thought=True),
-                    types.Part(function_call=types.FunctionCall(id="a1", name="verify_sources", args={}),
-                               thought_signature=b"sig"),
-                ]))],
-                usage_metadata=types.GenerateContentResponseUsageMetadata(
-                    prompt_token_count=1000, candidates_token_count=100, thoughts_token_count=200))
-
-    class Client:
-        models = Models()
-
-    llm = GeminiLLM(model="gemini-3.8-flash", thinking_level="LOW", client=Client())
-    turn = llm.generate(system="s", contents=[types.Content(role="user", parts=[types.Part(text="q")])],
-                        function_decls=[CHECK_LATEST_VERSION_DECL, VERIFY_SOURCES_DECL], seed=1, tool_mode="NONE")
-    cfg = seen["config"]
-    assert cfg.temperature is None and cfg.seed == 1
-    assert cfg.automatic_function_calling.disable is True
-    assert cfg.thinking_config.thinking_level == types.ThinkingLevel.LOW
-    assert [f.name for f in cfg.tools[0].function_declarations] == ["check_latest_version", "verify_sources"]
-    assert turn.text == "" and turn.function_calls[0].id == "a1"
-    assert turn.content.parts[1].thought_signature == b"sig"   # kept for the next turn
-    assert turn.record["cost_usd"] == pytest.approx((1000 * 0.75 + 300 * 3.75) / 1e6)
-    json.dumps(turn.record)  # log record is serialisable
-
-
 def test_openrouter_judge_request_and_usage(monkeypatch, tmp_path):
     """OpenRouter judge client against a mocked HTTP transport (no network)."""
     import httpx
 
-    from harness.openrouter import OpenRouterLLM
+    from harness.llm import OpenRouterLLM
 
     monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
     sent, replies = [], [httpx.Response(429, json={"error": "rate limited"})]
@@ -322,8 +283,8 @@ def test_openrouter_judge_request_and_usage(monkeypatch, tmp_path):
             "usage": {"prompt_tokens": 500, "completion_tokens": 120, "cost": 0.0022,
                       "completion_tokens_details": {"reasoning_tokens": 80}}})
 
-    monkeypatch.setattr("harness.openrouter.time.sleep", lambda s: None)
-    llm = OpenRouterLLM(model=config.JUDGE_MODEL, reasoning_effort="low", transport=httpx.MockTransport(handler))
+    monkeypatch.setattr("harness.llm.time.sleep", lambda s: None)
+    llm = OpenRouterLLM(model="gpt-6-sol", transport=httpx.MockTransport(handler))
     judge = scoring.Judge(llm, cache_dir=tmp_path)
     out = judge.label(q_by_id("irs-03"), "The 2024 figure is $21,900, but these instructions may be outdated.")
 
@@ -332,10 +293,86 @@ def test_openrouter_judge_request_and_usage(monkeypatch, tmp_path):
     body = json.loads(sent[-1].content)
     assert len(sent) == 2  # retried after the 429
     assert sent[-1].headers["authorization"] == "Bearer test-key"
-    assert body["model"] == config.JUDGE_MODEL and body["reasoning"] == {"effort": "low"}
+    assert body["model"] == "openai/gpt-6-sol-20260922" and body["reasoning"] == {"effort": "low"}
     assert body["response_format"]["json_schema"]["strict"] is True
     assert [m["role"] for m in body["messages"]] == ["system", "user"]
     assert "ANSWER TO LABEL" in body["messages"][1]["content"]
     # cached: no second request
     judge.label(q_by_id("irs-03"), "The 2024 figure is $21,900, but these instructions may be outdated.")
     assert len(sent) == 2
+
+
+def test_openrouter_tool_call_round_trip(monkeypatch):
+    """Tool declarations go out in OpenAI format; the assistant message (with
+    reasoning_details) comes back intact for the next turn."""
+    import httpx
+
+    from harness.llm import OpenRouterLLM
+    from harness.prompts import VERIFY_SOURCES_DECL
+    from harness.registry import CHECK_LATEST_VERSION_DECL
+
+    monkeypatch.setenv("OPENROUTER_API_KEY", "k")
+    sent = []
+    reasoning_details = [{"type": "reasoning.encrypted", "data": "sig"}]
+
+    def handler(request):
+        sent.append(json.loads(request.content))
+        return httpx.Response(200, json={"model": "deepseek/deepseek-v4.1-flash-20260910", "provider": "DeepSeek",
+            "choices": [{"finish_reason": "tool_calls", "message": {
+                "role": "assistant", "content": None, "reasoning_details": reasoning_details,
+                "tool_calls": [{"id": "tc1", "type": "function", "function": {
+                    "name": "check_latest_version", "arguments": '{"title_or_id": "Rev 4"}'}}]}}],
+            "usage": {"prompt_tokens": 1000, "completion_tokens": 300,
+                      "completion_tokens_details": {"reasoning_tokens": 200}}})
+
+    llm = OpenRouterLLM(model="deepseek-flash", transport=httpx.MockTransport(handler))
+    turn = llm.generate(system="s", messages=[{"role": "user", "content": "q"}],
+                        tools=[CHECK_LATEST_VERSION_DECL, VERIFY_SOURCES_DECL], web_search=True,
+                        seed=2, tool_choice="none")
+    body = sent[0]
+    assert body["model"] == "deepseek/deepseek-v4.1-flash-20260910"
+    assert body["messages"][0] == {"role": "system", "content": "s"}
+    assert body["temperature"] == 0.0 and body["seed"] == 2 and body["tool_choice"] == "none"
+    assert body["tools"][0]["function"]["name"] == "check_latest_version"
+    assert body["tools"][1]["function"]["parameters"] == {"type": "object", "properties": {}}
+    assert body["tools"][2] == {"type": "openrouter:web_search"}
+    assert "reasoning" not in body  # deepseek-flash uses the model default
+    assert turn.tool_calls[0].id == "tc1" and turn.tool_calls[0].args == {"title_or_id": "Rev 4"}
+    assert turn.message["reasoning_details"] == reasoning_details
+    # no OpenRouter cost reported -> price table: 1000*0.07 + 300*0.50 per 1M
+    assert turn.record["cost_usd"] == pytest.approx((1000 * 0.07 + 300 * 0.50) / 1e6)
+    json.dumps(turn.record)
+
+
+def test_model_aliases_resolve():
+    assert config.resolve("glm-5.3")["slug"] == "z-ai/glm-5.3-20260816"
+    assert config.resolve("glm-5.3")["reasoning"] == "low"
+    assert config.resolve("google/gemini-4-argon")["alias"] == "gemini-4-argon"
+    custom = config.resolve("someone/new-model")
+    assert custom["slug"] == "someone/new-model" and custom["price"] is None
+    for alias in ("deepseek-flash", "glm-5.3", "gpt-6-luna", "gpt-6-sol", "gemini-4-argon", "gemini-3.8-flash"):
+        assert alias in config.MODELS
+
+
+def test_openrouter_embedder(tmp_path):
+    import httpx
+
+    from harness.retrieval import OpenRouterEmbedder
+
+    def handler(request):
+        inp = json.loads(request.content)["input"]
+        return httpx.Response(200, json={"data": [{"index": i, "embedding": [float(len(t)), 1.0]}
+                                                  for i, t in reversed(list(enumerate(inp)))]})
+
+    http = httpx.Client(base_url="https://openrouter.ai/api/v1", transport=httpx.MockTransport(handler))
+    vecs = OpenRouterEmbedder(http, cache_path=tmp_path / "e.json").embed(["ab", "abcd", "ab"])
+    assert vecs[:, 0].tolist() == [2.0, 4.0, 2.0]
+
+
+def test_estimate_table():
+    from harness.estimate import estimate, stage_runs
+
+    plan = stage_runs(QUESTIONS)
+    assert sum(r for _, r in plan["sweep"]) == len(QUESTIONS) * 8 * 3
+    md = estimate(QUESTIONS, ["deepseek-flash", "glm-5.3"], ["gpt-6-luna"], n_questions=90)
+    assert "| deepseek-flash |" in md and "gpt-6-luna" in md

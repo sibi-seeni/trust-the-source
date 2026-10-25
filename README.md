@@ -2,7 +2,15 @@
 
 **Track 2 closure experiment:** does a harness-level freshness check make stale documents a non-issue?
 
-This is a harness for the experiment in *Track 2 Closure Experiment: Freshness Check Harness Comparison* (Oct 23, 2026). The design doc names DeepSeek, GPT-6 Luna and Gemini 4 Argon on OpenRouter. This first round runs on **`gemini-3.8-flash` through Google AI Studio** (the Gemini API) instead. Everything is set up so another model can be added later for the confirmation stage. The LLM judge that labels answers runs separately, on **GPT-6 Sol through OpenRouter**.
+This is a harness for the experiment in *Track 2 Closure Experiment: Freshness Check Harness Comparison* (Oct 23, 2026). Every model is called through **OpenRouter**. The current budget setup is:
+
+| Role | Model (alias → OpenRouter slug) | $ / 1M tokens in / out |
+|---|---|---|
+| Main sweep | `deepseek-flash` → `deepseek/deepseek-v4.1-flash-20260910` | $0.07 / $0.50 |
+| Confirmation | `glm-5.3` → `z-ai/glm-5.3-20260816` (reasoning effort `low`) | $1.40 / $4.40 |
+| Judge | `gpt-6-luna` → `openai/gpt-6-luna` | $0.10 / $0.50 |
+
+The funded-tier models are still in [`harness/config.py`](harness/config.py), so switching to them is a single flag: `gpt-6-sol`, `gemini-4-argon` and `gemini-3.8-flash`. For example, `--model gemini-3.8-flash` or `TTS_JUDGE_MODEL=gpt-6-sol`. Any other OpenRouter slug also works with `--model`.
 
 ## What it does
 
@@ -22,7 +30,7 @@ Every question goes through the same retrieval (hybrid BM25 + dense, top‑5, wi
 The "online check" is a **mock version registry** ([`data/registry.json`](data/registry.json)). There are two extra conditions:
 
 - **Registry unavailable:** the tool times out, and the correct behaviour is to answer with an "unable to verify" warning.
-- **Live web:** A3 with Gemini's Google Search grounding in place of the registry, on a 20-question subset. It's reported separately and not scored against the closure rule.
+- **Live web:** A3 with OpenRouter's `openrouter:web_search` server tool in place of the registry, on a 20-question subset. It's reported separately and not scored against the closure rule.
 
 Each question has exactly one case type (C1–C7, as in the design doc). Outcomes are scored as `correct / flagged_correctly / stale / false_flag / missed_flag / wrong`. The report gives, per arm:
 
@@ -52,13 +60,15 @@ cache/                 response, judge and embedding caches (git-ignored)
 ```bash
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-export GEMINI_API_KEY=...        # model under test, from https://aistudio.google.com/apikey
-export OPENROUTER_API_KEY=...    # judge, from https://openrouter.ai/settings/keys
+export OPENROUTER_API_KEY=...    # from https://openrouter.ai/settings/keys
 python -m pytest -q              # offline sanity check
-python -m harness preflight      # checks both models, a tool-call round-trip, judge JSON output and embeddings
+python -m harness estimate       # cost per stage and model (no API calls)
+python -m harness preflight      # checks the models, a tool-call round-trip, judge JSON output and embeddings
 ```
 
-Preflight costs a fraction of a cent. It exits non-zero if function calling doesn't work, if the judge slug isn't listed on OpenRouter, or if the judge doesn't return schema-valid JSON. That way you find out before spending anything. `run --no-score` needs only the Gemini key, and `score` needs only the OpenRouter key.
+Preflight costs a fraction of a cent. It does what the design doc's section 10 asks: it fetches `/api/v1/models`, and fails if a model isn't listed, if a model under test doesn't list `tools` in `supported_parameters`, or if the judge doesn't list structured outputs. It also prints each model's live price next to the price in the config table. Then it runs a real tool-call round-trip on each model under test and a schema-JSON call on the judge. Check another model with `--models gemini-4-argon,gpt-6-sol`.
+
+To keep spending under control, set a credit limit on the API key in the OpenRouter dashboard.
 
 ## Run order (design doc section 8)
 
@@ -77,10 +87,13 @@ python -m harness run --stage unavailable --name unavailable
 # 3. Pick the confirmation set (questions any arm got wrong + 25 stratified), arms A1, A4 + best model-driven arm
 python -m harness select-confirm --run sweep          # writes data/confirm_set.json
 
-# 4. Confirmation on another model, when you get to it
-python -m harness run --stage confirm --model <other-gemini-model> --name confirm-<model>
+# 4. Confirmation on the second model (glm-5.3 by default; --model gemini-4-argon once funded)
+python -m harness run --stage confirm --name confirm-glm
 
-# 5. Live web subset: 20 questions x A3 with Google Search grounding
+# Re-estimate from what the pilot actually used, before committing to the sweep
+python -m harness estimate --from-run pilot --questions 90
+
+# 5. Live web subset: 20 questions x A3 with OpenRouter web search
 python -m harness run --stage live --name live
 
 # Hand-check: 10% random sample + every rule/judge disagreement -> runs/<name>/handcheck.csv
@@ -92,12 +105,13 @@ Useful flags for `run`:
 - `--arms A0,A4` and `--questions irs-01,nist-03` narrow a run.
 - `--seeds 0` sets the seeds.
 - `--workers 4` sets parallelism.
-- `--rpm 10` caps requests per minute to fit your AI Studio rate-limit tier.
-- `--retrieval bm25` skips the embedding calls.
+- `--model glm-5.3` (or any alias / slug) picks the model.
+- `--rpm 10` caps requests per minute.
+- `--retrieval bm25` skips the embedding calls (`openai/text-embedding-3-small` by default, a few cents' worth at most).
 - `--no-cache` forces fresh calls.
 - `--no-score` skips scoring.
 
-Results are cached by (model, thinking level, arm, question, seed, condition, prompt version, retrieved passages), so reruns only pay for new prompts. `python -m harness score --run <name>` re-scores from `results.jsonl` without rerunning the arms. `report` rebuilds the table with no API calls at all.
+Results are cached by (model, reasoning effort, arm, question, seed, condition, prompt version, retrieved passages), so reruns only pay for new prompts. `python -m harness score --run <name>` re-scores from `results.jsonl` without rerunning the arms. `report` rebuilds the table with no API calls at all.
 
 ## Before the main sweep
 
@@ -110,17 +124,27 @@ The data here is a **draft** that's meant to be checked before anyone quotes a n
 - **The registry is a frozen universe.** "Latest" means latest *among the versions in this experiment*. FY2026 per diem rates and newer pandas releases are left out on purpose.
 - **Freeze `data/` in Git** before the sweep. Each run's `meta.json` records the commit it ran on.
 
-## Where this differs from the design doc (Gemini on AI Studio)
+## Where this differs from the design doc
 
-- **No temperature 0 or fixed top‑k.** Google's docs for Gemini 3.8 Flash say temperature, top_k and top_p are ignored by the backend. They aren't sent. Reasoning effort is the default `thinking_level` (MEDIUM), and it's logged on every call. Set `TTS_THINKING_LEVEL=LOW|MEDIUM|HIGH` to change it.
-- **Seeds:** a `seed` is passed and logged, and each condition still runs 3 times. Treat the seeds as repeated samples for measuring variance, not as a determinism guarantee.
-- **Judge:** the design doc puts the judge on the sweep model. Here it runs on **GPT-6 Sol via OpenRouter** instead, so a different model family judges Gemini's answers. It's pinned to the dated slug `openai/gpt-6-sol-20260922`, with `reasoning.effort=low` and strict JSON-schema output. The served model, provider and OpenRouter-reported cost are logged for every judge call. Override with `TTS_JUDGE_MODEL` (e.g. the floating `openai/gpt-6-sol`) and `TTS_JUDGE_REASONING_EFFORT`. Rule-based regex matching takes precedence wherever the answer is numeric or a short identifier, and the hand-check of 10% + all disagreements still applies.
-- **Skill (A5):** there's no native skill primitive in the Gemini API. A skill is simulated as an on-demand instruction load through a tool call that also unlocks the registry tool. Say so in the write-up.
-- **Live web:** uses Gemini's Google Search grounding tool instead of OpenRouter's web search. Grounded requests may be billed separately from tokens. Check the AI Studio pricing page.
-- **Model check:** the "assert `tools` in `supported_parameters`" check is replaced by `preflight`, which confirms the model exists and actually round-trips a function call.
-- **Thought signatures:** function calling is handled manually, and the model's turn is appended to the history as returned, which keeps Gemini 3 thought signatures intact.
-- **Cost:** computed at $0.75 / $3.75 per 1M input/output tokens (introductory pricing through 2026). Thinking tokens count as output. Verify against your AI Studio usage page; prices live in `harness/config.py`.
+- **Models:** the main sweep runs on DeepSeek V4.1 Flash, as in the design doc. Confirmation uses GLM 5.3 rather than GPT-6 Luna and Gemini 4 Argon, and the judge is GPT-6 Luna rather than DeepSeek. Luna is cheap, it's a different model family from both models under test, and it supports strict JSON-schema output. For the funded run, use Sol as the judge and Argon / Gemini 3.8 Flash for confirmation.
+- **GLM 5.3 reasoning:** GLM 5.3 always reasons, and its default effort is `max`, which multiplies output tokens. It's set to `low` to keep it in budget, which departs from the doc's "reasoning effort kept at the default". Everything else uses its model default. Change it with `TTS_REASONING_EFFORT`, which overrides every model; whatever is used is logged on every call.
+- **Temperature and seeds:** temperature 0 and a seed are sent on every call and logged. Some models ignore them, notably reasoning models and Gemini 3.8 Flash, which Google says ignores sampling settings. So treat the three seeds as repeated samples for measuring variance, not as a determinism guarantee. The design doc's fixed top‑k isn't sent, because not all of these models support it.
+- **Providers:** OpenRouter may route a model to different providers. The provider and the exact model version served are logged per call (`provider`, `model_version` in the trace), so you can check this afterwards.
+- **Judge:** rule-based regex matching takes precedence wherever the answer is numeric or a short identifier. Luna labels the freshness flags, and the hand-check of 10% + all disagreements still applies.
+- **Skill (A5):** OpenRouter has no native skill primitive. A skill is simulated as an on-demand instruction load through a tool call that also unlocks the registry tool. Say so in the write-up.
+- **Reasoning across tool turns:** tool calling is handled manually. The assistant message is appended to the history exactly as returned, including `reasoning_details`, which OpenRouter needs back for reasoning models (for example, Gemini's thought signatures).
+- **Cost:** the cost logged per call is what OpenRouter reports, so it includes web search fees. The price table in `config.py` is used only for estimates and as a fallback.
 
-## Rough cost
+## Cost estimate
 
-Each call is short (five short passages), but thinking tokens dominate output. Expect a few tenths of a cent per call. That puts the full 42-question sweep (~1,000 runs, ~2,000 calls) roughly in the **$5–15** range on Gemini. The judge (GPT-6 Sol, $2 / $10 per 1M tokens) makes one short call per run, which adds roughly **$2–5** on OpenRouter. The report shows the judge cost on its own line. The pilot report's "Cost / 100 Qs" column gives you the real figure before you commit to the sweep.
+`python -m harness estimate` prints this table. The token assumptions are about 1,100–1,600 input tokens per call (the base prompt measures about 670) and 400–1,500 output tokens per call. Reasoning tokens are the big unknown. On the current 42 questions, the full design-doc plan comes to 88 pilot runs, 1,008 sweep runs, 90 registry-unavailable runs, 20 live runs and about 240 confirmation runs.
+
+| Model | Pilot | Sweep | Unavailable | Live | Confirmation set | Full plan on this model (excl. confirm) |
+|---|---|---|---|---|---|---|
+| DeepSeek V4.1 Flash | $0.05–0.15 | $0.56–1.74 | $0.06–0.20 | $0.01–0.03 | $0.09–0.28 | **$0.68–2.13** |
+| GLM 5.3 (effort low) | $0.58–1.56 | $6.65–17.82 | $0.77–2.07 | $0.13–0.35 | $1.06–2.83 | **$8.14–21.80** |
+| Gemini 3.8 Flash (funded) | $0.41–1.20 | $4.69–13.76 | $0.54–1.60 | $0.09–0.27 | $0.74–2.18 | $5.73–16.83 |
+
+The judge makes one short call per run: about **$0.31–0.56 on GPT-6 Luna**, or $6–11 on GPT-6 Sol.
+
+**Recommended budget plan:** run the full plan on DeepSeek, then only the confirmation set on GLM 5.3, with Luna as the judge. That's about **$1.10–3.00** in total, plus a few cents for embeddings and web search. Running the full sweep on GLM 5.3 as well costs roughly 12× DeepSeek. Scaling to the doc's 90 questions roughly doubles the sweep figures (`estimate --questions 90`). After the pilot, `estimate --from-run pilot` redoes the table from the tokens that were actually used.

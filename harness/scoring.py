@@ -6,8 +6,6 @@ import hashlib
 import json
 import re
 
-from google.genai import types
-
 from . import config
 
 FLAG_TYPES = ["outdated", "unverifiable", "inconsistent", "unable_to_verify"]
@@ -79,13 +77,13 @@ class Judge:
         self.cache_dir.mkdir(parents=True, exist_ok=True)
 
     def label(self, q, answer: str) -> dict:
-        key = hashlib.sha256(json.dumps([self.llm.model, self.llm.thinking_level, config.PROMPT_VERSION,
+        key = hashlib.sha256(json.dumps([self.llm.model, self.llm.reasoning_effort, config.PROMPT_VERSION,
                                          JUDGE_SYSTEM, judge_prompt(q, answer)]).encode()).hexdigest()
         path = self.cache_dir / f"{key}.json"
         if path.exists():
             return json.loads(path.read_text())
         turn = self.llm.generate(system=JUDGE_SYSTEM,
-                                 contents=[types.Content(role="user", parts=[types.Part(text=judge_prompt(q, answer))])],
+                                 messages=[{"role": "user", "content": judge_prompt(q, answer)}],
                                  seed=0, json_schema=JUDGE_SCHEMA)
         try:
             labels = json.loads(turn.text)

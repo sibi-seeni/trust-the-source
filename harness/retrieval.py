@@ -42,11 +42,11 @@ class BM25:
         return out
 
 
-class GeminiEmbedder:
-    """Embeds text with the Gemini embedding model, cached on disk."""
+class OpenRouterEmbedder:
+    """Embeds text through OpenRouter's /embeddings endpoint, cached on disk."""
 
-    def __init__(self, client, model: str = config.EMBED_MODEL, cache_path: Path | None = None):
-        self.client, self.model = client, model
+    def __init__(self, http, model: str = config.EMBED_MODEL, cache_path: Path | None = None):
+        self.http, self.model = http, model
         self.cache_path = cache_path or config.CACHE_DIR / "embeddings.json"
         self.cache = json.loads(self.cache_path.read_text()) if self.cache_path.exists() else {}
 
@@ -57,14 +57,12 @@ class GeminiEmbedder:
         missing = [t for t in dict.fromkeys(texts) if self._key(t) not in self.cache]
         for i in range(0, len(missing), 50):
             batch = missing[i:i + 50]
-            resp = self.client.models.embed_content(model=self.model, contents=batch)
-            embs = resp.embeddings or []
-            if len(embs) != len(batch):
-                # Some models fold a multi-part request into one embedding; go one at a time.
-                embs = [self.client.models.embed_content(model=self.model, contents=t).embeddings[0]
-                        for t in batch]
-            for t, e in zip(batch, embs):
-                self.cache[self._key(t)] = e.values
+            resp = self.http.post("/embeddings", json={"model": self.model, "input": batch})
+            if resp.status_code >= 400:
+                raise RuntimeError(f"OpenRouter embeddings {resp.status_code}: {resp.text[:300]}")
+            rows = sorted(resp.json()["data"], key=lambda d: d["index"])
+            for t, row in zip(batch, rows):
+                self.cache[self._key(t)] = row["embedding"]
         if missing:
             self.cache_path.parent.mkdir(parents=True, exist_ok=True)
             self.cache_path.write_text(json.dumps(self.cache))

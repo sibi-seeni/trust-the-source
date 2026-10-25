@@ -13,8 +13,8 @@ from .registry import MockRegistry
 from .retrieval import retrieve
 
 
-def job_key(model, thinking, arm, qid, seed, condition, retrieved) -> str:
-    blob = json.dumps([model, thinking or "default", arm, qid, seed, condition, config.PROMPT_VERSION, retrieved])
+def job_key(model, reasoning, arm, qid, seed, condition, retrieved) -> str:
+    blob = json.dumps([model, reasoning or "default", arm, qid, seed, condition, config.PROMPT_VERSION, retrieved])
     return hashlib.sha256(blob.encode()).hexdigest()[:24]
 
 
@@ -30,10 +30,10 @@ def run_one(llm, q, arm, seed, condition, passages, registry_data) -> dict:
         error = f"{type(e).__name__}: {e}\n{traceback.format_exc(limit=3)}"
     llm_calls = [e for e in ctx.trace if e["type"] == "llm_call"]
     usage = {k: sum(c["usage"].get(k, 0) for c in llm_calls)
-             for k in ("prompt", "output", "thoughts", "tool_use_prompt", "cached")}
+             for k in ("prompt", "output", "thoughts", "cached")}
     costs = [c["cost_usd"] for c in llm_calls]
     return {
-        "model": llm.model, "thinking_level": llm.thinking_level or "default",
+        "model": llm.model, "model_alias": llm.alias, "reasoning_effort": llm.reasoning_effort or "default",
         "arm": arm, "qid": q.id, "case": q.case, "family": q.family, "seed": seed, "condition": condition,
         "prompt_version": config.PROMPT_VERSION,
         "retrieved": [p.pid for p in passages],
@@ -65,7 +65,7 @@ def run_jobs(llm, jobs, corpus, registry_data, out_path, embedder=None, workers=
     def work(job):
         q, arm, seed, condition = job
         passages = retrieved[q.id]
-        key = job_key(llm.model, llm.thinking_level, arm, q.id, seed, condition, [p.pid for p in passages])
+        key = job_key(llm.model, llm.reasoning_effort, arm, q.id, seed, condition, [p.pid for p in passages])
         cpath = cache_dir / f"{key}.json"
         if use_cache and cpath.exists():
             rec = json.loads(cpath.read_text())

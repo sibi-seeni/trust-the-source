@@ -6,8 +6,6 @@ import json
 import re
 from dataclasses import dataclass, field
 
-from google.genai import types
-
 from . import config, prompts
 from .data import Passage, Question
 from .registry import CHECK_LATEST_VERSION_DECL, MockRegistry
@@ -34,29 +32,25 @@ def _system(*extra: str) -> str:
 
 
 def tool_loop(ctx: RunContext, system: str, user_text: str, decls: list, handlers: dict,
-              role: str = "main", google_search: bool = False) -> str:
+              role: str = "main", web_search: bool = False) -> str:
     """Run model turns, executing function calls, until the model answers in text.
     On the last allowed step function calling is switched off to force an answer.
     `decls` may be extended by a handler (that's how a skill unlocks a tool)."""
-    contents = [types.Content(role="user", parts=[types.Part(text=user_text)])]
+    messages = [{"role": "user", "content": user_text}]
     for step in range(config.MAX_TOOL_STEPS + 1):
         final = step == config.MAX_TOOL_STEPS
-        turn = ctx.llm.generate(system=system, contents=contents, function_decls=list(decls) or None,
-                                google_search=google_search, seed=ctx.seed,
-                                tool_mode="NONE" if final and decls else None)
+        turn = ctx.llm.generate(system=system, messages=messages, tools=list(decls) or None,
+                                web_search=web_search, seed=ctx.seed,
+                                tool_choice="none" if final and decls else None)
         ctx.log_llm(role, turn)
-        if not turn.function_calls or final:
+        if not turn.tool_calls or final:
             return turn.text
-        contents.append(turn.content)
-        replies = []
-        for fc in turn.function_calls:
-            args = dict(fc.args or {})
-            handler = handlers.get(fc.name)
-            result = handler(args) if handler else {"error": f"Unknown tool '{fc.name}'."}
-            ctx.log_tool(role, fc.name, args, result)
-            replies.append(types.Part(function_response=types.FunctionResponse(
-                id=fc.id, name=fc.name, response=result if isinstance(result, dict) else {"result": result})))
-        contents.append(types.Content(role="user", parts=replies))
+        messages.append(turn.message)
+        for tc in turn.tool_calls:
+            handler = handlers.get(tc.name)
+            result = handler(tc.args) if handler else {"error": f"Unknown tool '{tc.name}'."}
+            ctx.log_tool(role, tc.name, tc.args, result)
+            messages.append({"role": "tool", "tool_call_id": tc.id, "content": json.dumps(result)})
     return ""
 
 
@@ -143,10 +137,10 @@ def a3_tool(ctx):
 
 
 def a3_web(ctx):
-    """Live condition: A3 with Google Search grounding in place of the mock registry."""
+    """Live condition: A3 with OpenRouter's web search server tool in place of the mock registry."""
     return tool_loop(ctx, _system(prompts.FRESHNESS_LINE),
                      prompts.user_message(ctx.question.question, prompts.format_passages(ctx.passages)),
-                     [], {}, google_search=True)
+                     [], {}, web_search=True)
 
 
 def a4_forced_check(ctx):
