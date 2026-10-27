@@ -88,7 +88,7 @@ def test_every_doc_family_is_in_registry():
     ("NIST SP 800-53 Revision 4 (NIST.SP.800-53r4.pdf)", "Rev 4", "withdrawn"),
     ("2024 Instructions for Form 1040 (i1040gi_2024.pdf)", "Tax Year 2024", "superseded"),
     ("pandas 2.0 API reference (pandas-docs-2.0.pdf)", "2.0", "current"),
-    ("FM 3-0 Operations (October 2017) (FM3-0_2017.pdf)", "2017", "superseded"),
+    ("NumPy 1.26 reference (numpy-docs-1.26.pdf)", "1.26", "superseded"),
     ("GSA Per Diem Rates, Fiscal Year 2025 (FY2025_PerDiem_Rates.pdf)", "FY2025", "current"),
 ])
 def test_registry_lookup_by_title_and_filename(query, version, status):

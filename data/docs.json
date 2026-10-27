@@ -1,5 +1,5 @@
 {
-  "_note": "Passage texts are short paraphrased excerpts written to stand in for the public source documents. Before the main sweep, replace each one with the verbatim text from source_url at the given locator, check every gold answer in questions.json against it, then freeze both files in Git. `ingest` holds the date/version/status that ingestion can read off the document itself (shown in arm A2 only). Families with default_pool=true contribute distractor passages to questions from other families.",
+  "_note": "Passage texts are verbatim excerpts from the source at source_url and locator, checked word for word against the downloaded documents (Oct 27, 2026). Separate excerpts within a passage are joined with a space; table rows are rendered as 'ID Name;' (NIST) or 'header: value | ...' (GSA) from the table cells. Documents with variant_of are deliberate edits of a verified passage, described in their source_url. `ingest` holds the date/version/status that ingestion can read off the document itself (shown in arm A2 only). Families with default_pool=true contribute distractor passages to questions from other families.",
   "docs": [
     {
       "doc_id": "irs-2024", "family": "IRS-1040-INSTR", "default_pool": false,
@@ -7,12 +7,12 @@
       "source_url": "https://www.irs.gov/pub/irs-prior/i1040gi--2024.pdf",
       "ingest": {"date": "2024", "version": "Tax Year 2024", "status": "active"},
       "passages": [
-        {"pid": "irs-2024-p1", "locator": "Line 12, Standard Deduction Chart for Most People",
-         "text": "2024 Form 1040 Instructions, Line 12. Standard Deduction Chart for Most People. If your filing status is Single or Married filing separately, your standard deduction is $14,600. Married filing jointly or Qualifying surviving spouse: $29,200. Head of household: $21,900. Do not use this chart if you were born before January 2, 1960, or were blind, or if someone can claim you as a dependent."},
-        {"pid": "irs-2024-p2", "locator": "Line 12, Standard Deduction Chart for People Born Before January 2, 1960, or Blind",
-         "text": "2024 Form 1040 Instructions. If you were born before January 2, 1960, or were blind at the end of 2024, you get an additional standard deduction. The additional amount for each condition is $1,950 if you are unmarried (Single or Head of household), or $1,550 if you are married or a qualifying surviving spouse."},
-        {"pid": "irs-2024-p3", "locator": "Schedule 1, Line 21, Student Loan Interest Deduction",
-         "text": "2024 Instructions, Schedule 1, Line 21. You may be able to deduct interest you paid in 2024 on a qualified student loan. The deduction is limited to $2,500 and is phased out if your modified adjusted gross income exceeds certain limits."}
+        {"pid": "irs-2024-p1", "locator": "What's New, Standard deduction amount increased",
+         "text": "Standard deduction amount increased. For 2024, the standard deduction amount has been increased for all filers. The amounts are: • $14,600–Single or Married filing separately. • $29,200–Married filing jointly or Qualifying surviving spouse. • $21,900–Head of household."},
+        {"pid": "irs-2024-p2", "locator": "Line 12, Standard Deduction Worksheet for Dependents, line 4b; Standard Deduction Chart for People Who Were Born Before January 2, 1960, or Were Blind",
+         "text": "Standard Deduction Worksheet for Dependents—Line 12 4. Standard deduction. b. If born before January 2, 1960, or blind, multiply the number on line 1 by $1,550 ($1,950 if single or head of household) Standard Deduction Chart for People Who Were Born Before January 2, 1960, or Were Blind Don’t use this chart if someone can claim you, or your spouse if filing jointly, as a dependent. Instead, use the worksheet above."},
+        {"pid": "irs-2024-p3", "locator": "Schedule 1, Line 21, Student Loan Interest Deduction, and its worksheet (line 1)",
+         "text": "Student Loan Interest Deduction You can take this deduction only if all of the following apply. • You paid interest in 2024 on a qualified student loan (defined later). • Your filing status is any status except married filing separately. Student Loan Interest Deduction Worksheet—Schedule 1, Line 21 1. Enter the total interest you paid in 2024 on qualified student loans (see the instructions for line 21). Don’t enter more than $2,500"}
       ]
     },
     {
@@ -21,32 +21,32 @@
       "source_url": "https://www.irs.gov/pub/irs-pdf/i1040gi.pdf",
       "ingest": {"date": "2025", "version": "Tax Year 2025", "status": "active"},
       "passages": [
-        {"pid": "irs-2025-p1", "locator": "Line 12, Standard Deduction Chart for Most People",
-         "text": "2025 Form 1040 Instructions, Line 12. Standard Deduction Chart for Most People. If your filing status is Single or Married filing separately, your standard deduction is $15,750. Married filing jointly or Qualifying surviving spouse: $31,500. Head of household: $23,625. Do not use this chart if you were born before January 2, 1961, or were blind, or if someone can claim you as a dependent."},
-        {"pid": "irs-2025-p2", "locator": "Line 12, Standard Deduction Chart for People Born Before January 2, 1961, or Blind",
-         "text": "2025 Form 1040 Instructions. If you were born before January 2, 1961, or were blind at the end of 2025, you get an additional standard deduction. The additional amount for each condition is $2,000 if you are unmarried (Single or Head of household), or $1,600 if you are married or a qualifying surviving spouse."},
-        {"pid": "irs-2025-p3", "locator": "Schedule 1, Line 21, Student Loan Interest Deduction",
-         "text": "2025 Instructions, Schedule 1, Line 21. You may be able to deduct interest you paid in 2025 on a qualified student loan. The deduction is limited to $2,500 and is phased out if your modified adjusted gross income exceeds certain limits."}
+        {"pid": "irs-2025-p1", "locator": "What's New, Standard deduction amount increased",
+         "text": "Standard deduction amount increased. For 2025, the standard deduction amount has been increased for all filers. The amounts are: • $15,750–Single or Married filing separately. • $31,500–Married filing jointly or Qualifying surviving spouse. • $23,625–Head of household."},
+        {"pid": "irs-2025-p2", "locator": "Line 12e, Standard Deduction Worksheet for Dependents, line 4b; Standard Deduction Chart for People Who Were Born Before January 2, 1961, or Were Blind",
+         "text": "Standard Deduction Worksheet for Dependents—Line 12e 4. Standard deduction. b. If born before January 2, 1961, or blind, multiply the number on line 1 by $1,600 ($2,000 if single or head of household) Standard Deduction Chart for People Who Were Born Before January 2, 1961, or Were Blind Don’t use this chart if someone can claim you, or your spouse if filing jointly, as a dependent. Instead, use the worksheet above."},
+        {"pid": "irs-2025-p3", "locator": "Schedule 1, Line 21, Student Loan Interest Deduction, and its worksheet (line 1)",
+         "text": "Student Loan Interest Deduction You can take this deduction only if all of the following apply. • You paid interest in 2025 on a qualified student loan (defined later). • Your filing status is any status except married filing separately. Student Loan Interest Deduction Worksheet—Schedule 1, Line 21 1. Enter the total interest you paid in 2025 on qualified student loans (see the instructions for line 21). Don’t enter more than $2,500"}
       ]
     },
     {
       "doc_id": "irs-undated", "family": "IRS-1040-INSTR", "default_pool": false, "variant_of": "irs-2024",
       "filename": "i1040gi.pdf", "title": "Instructions for Form 1040",
-      "source_url": "derived from irs-2024 with tax years and birth-date cutoffs removed",
+      "source_url": "derived from irs-2024 (What's New passage) with the tax year removed: 'For 2024, the standard deduction amount' -> 'The standard deduction amount'",
       "ingest": {"date": "unknown", "version": "unknown", "status": "unknown"},
       "passages": [
-        {"pid": "irs-undated-p1", "locator": "Line 12, Standard Deduction Chart for Most People",
-         "text": "Form 1040 Instructions, Line 12. Standard Deduction Chart for Most People. If your filing status is Single or Married filing separately, your standard deduction is $14,600. Married filing jointly or Qualifying surviving spouse: $29,200. Head of household: $21,900. Do not use this chart if you were 65 or older, or were blind, or if someone can claim you as a dependent."}
+        {"pid": "irs-undated-p1", "locator": "What's New, Standard deduction amount increased",
+         "text": "Standard deduction amount increased. The standard deduction amount has been increased for all filers. The amounts are: • $14,600–Single or Married filing separately. • $29,200–Married filing jointly or Qualifying surviving spouse. • $21,900–Head of household."}
       ]
     },
     {
       "doc_id": "irs-c7", "family": "IRS-1040-INSTR", "default_pool": false, "variant_of": "irs-2024",
       "filename": "i1040gi_2025.pdf", "title": "2025 Instructions for Form 1040",
-      "source_url": "irs-2024 content saved under the 2025 filename (filename/header mismatch)",
+      "source_url": "irs-2024 What's New passage, verbatim, saved under the 2025 filename and title (filename/header mismatch)",
       "ingest": {"date": "2025", "version": "Tax Year 2025", "status": "active"},
       "passages": [
-        {"pid": "irs-c7-p1", "locator": "Line 12, Standard Deduction Chart for Most People",
-         "text": "2024 Form 1040 Instructions, Line 12. Standard Deduction Chart for Most People. If your filing status is Single or Married filing separately, your standard deduction is $14,600. Married filing jointly or Qualifying surviving spouse: $29,200. Head of household: $21,900. Do not use this chart if you were born before January 2, 1960, or were blind, or if someone can claim you as a dependent."}
+        {"pid": "irs-c7-p1", "locator": "What's New, Standard deduction amount increased",
+         "text": "Standard deduction amount increased. For 2024, the standard deduction amount has been increased for all filers. The amounts are: • $14,600–Single or Married filing separately. • $29,200–Married filing jointly or Qualifying surviving spouse. • $21,900–Head of household."}
       ]
     },
 
@@ -56,14 +56,14 @@
       "source_url": "https://nvlpubs.nist.gov/nistpubs/SpecialPublications/NIST.SP.800-53r4.pdf",
       "ingest": {"date": "2013-04-30", "version": "Rev 4", "status": "withdrawn"},
       "passages": [
-        {"pid": "nist-r4-p1", "locator": "Section 2.2, Table 1 (Security control identifiers and family names)",
-         "text": "NIST SP 800-53 Revision 4 (April 2013). Security controls are organized into eighteen families. Each family contains controls related to the general security topic of the family. The families are: Access Control (AC), Awareness and Training (AT), Audit and Accountability (AU), Security Assessment and Authorization (CA), Configuration Management (CM), Contingency Planning (CP), Identification and Authentication (IA), Incident Response (IR), Maintenance (MA), Media Protection (MP), Physical and Environmental Protection (PE), Planning (PL), Program Management (PM), Personnel Security (PS), Risk Assessment (RA), System and Services Acquisition (SA), System and Communications Protection (SC), and System and Information Integrity (SI)."},
-        {"pid": "nist-r4-p2", "locator": "Appendix F, SA-12",
-         "text": "NIST SP 800-53 Rev. 4, Appendix F. SA-12 SUPPLY CHAIN PROTECTION. Control: The organization protects against supply chain threats to the information system, system component, or information system service by employing organization-defined security safeguards as part of a comprehensive, defense-in-breadth information security strategy."},
-        {"pid": "nist-r4-p3", "locator": "Appendix J, Privacy Control Catalog",
-         "text": "NIST SP 800-53 Rev. 4, Appendix J. Privacy controls are provided in a separate privacy control catalog in Appendix J, organized into eight families: Authority and Purpose (AP), Accountability, Audit, and Risk Management (AR), Data Quality and Integrity (DI), Data Minimization and Retention (DM), Individual Participation and Redress (IP), Security (SE), Transparency (TR), and Use Limitation (UL)."},
-        {"pid": "nist-r4-p4", "locator": "Appendix F, AC-2",
-         "text": "NIST SP 800-53 Rev. 4, Appendix F. AC-2 ACCOUNT MANAGEMENT. Control: The organization identifies and selects the types of information system accounts that support organizational missions and business functions, assigns account managers, and establishes conditions for group and role membership."}
+        {"pid": "nist-r4-p1", "locator": "Chapter 2, Section 2.2 and Table 1 (security control identifiers and family names)",
+         "text": "Special Publication 800-53 Revision 4 2.2 SECURITY CONTROL STRUCTURE Security controls described in this publication have a well-defined organization and structure. For ease of use in the security control selection and specification process, controls are organized into eighteen families. Each family contains security controls related to the general security topic of the family. A two-character identifier uniquely identifies security control families, for example, PS (Personnel Security). Table 1 lists the security control families and the associated family identifiers in the security control catalog. TABLE 1: SECURITY CONTROL IDENTIFIERS AND FAMILY NAMES AC Access Control; AT Awareness and Training; AU Audit and Accountability; CA Security Assessment and Authorization; CM Configuration Management; CP Contingency Planning; IA Identification and Authentication; IR Incident Response; MA Maintenance; MP Media Protection; PE Physical and Environmental Protection; PL Planning; PS Personnel Security; RA Risk Assessment; SA System and Services Acquisition; SC System and Communications Protection; SI System and Information Integrity; PM Program Management;"},
+        {"pid": "nist-r4-p2", "locator": "Appendix F, SA-12 Supply Chain Protection (control statement)",
+         "text": "Special Publication 800-53 Revision 4 SA-12 SUPPLY CHAIN PROTECTION Control: The organization protects against supply chain threats to the information system, system component, or information system service by employing [Assignment: organization-defined security safeguards] as part of a comprehensive, defense-in-breadth information security strategy."},
+        {"pid": "nist-r4-p3", "locator": "Appendix J, Privacy Control Catalog, introduction and Table J-1 (family names)",
+         "text": "Special Publication 800-53 Revision 4 APPENDIX J PRIVACY CONTROL CATALOG There are eight privacy control families, each aligning with one of the FIPPs. TABLE J-1: SUMMARY OF PRIVACY CONTROLS BY FAMILY AP Authority and Purpose; AR Accountability, Audit, and Risk Management; DI Data Quality and Integrity; DM Data Minimization and Retention; IP Individual Participation and Redress; SE Security; TR Transparency; UL Use Limitation;"},
+        {"pid": "nist-r4-p4", "locator": "Appendix F, AC-2 Account Management (control statement, items a-c)",
+         "text": "Special Publication 800-53 Revision 4 AC-2 ACCOUNT MANAGEMENT Control: The organization: a. Identifies and selects the following types of information system accounts to support organizational missions/business functions: [Assignment: organization-defined information system account types]; b. Assigns account managers for information system accounts; c. Establishes conditions for group and role membership;"}
       ]
     },
     {
@@ -72,179 +72,135 @@
       "source_url": "https://nvlpubs.nist.gov/nistpubs/SpecialPublications/NIST.SP.800-53r5.pdf",
       "ingest": {"date": "2020-09-23", "version": "Rev 5", "status": "active"},
       "passages": [
-        {"pid": "nist-r5-p1", "locator": "Section 2.2, Table 1 (Security and privacy control families)",
-         "text": "NIST SP 800-53 Revision 5 (September 2020). The security and privacy controls are organized into twenty families: Access Control (AC), Awareness and Training (AT), Audit and Accountability (AU), Assessment, Authorization, and Monitoring (CA), Configuration Management (CM), Contingency Planning (CP), Identification and Authentication (IA), Incident Response (IR), Maintenance (MA), Media Protection (MP), Physical and Environmental Protection (PE), Planning (PL), Program Management (PM), Personnel Security (PS), PII Processing and Transparency (PT), Risk Assessment (RA), System and Services Acquisition (SA), System and Communications Protection (SC), System and Information Integrity (SI), and Supply Chain Risk Management (SR)."},
-        {"pid": "nist-r5-p2", "locator": "Chapter 3, SR family introduction; SA-12 withdrawal note",
-         "text": "NIST SP 800-53 Rev. 5. Supply chain risk management controls are consolidated in the new Supply Chain Risk Management (SR) family, beginning with SR-1 Policy and Procedures and SR-2 Supply Chain Risk Management Plan. Control SA-12 Supply Chain Protection is withdrawn and incorporated into the SR family."},
-        {"pid": "nist-r5-p3", "locator": "Chapter 1, Section 1.1 (integration of privacy controls)",
-         "text": "NIST SP 800-53 Rev. 5. This revision integrates privacy controls into the security control catalog, creating a consolidated and unified set of controls for systems and organizations. The separate privacy appendix used in the previous revision is eliminated, and privacy-specific controls appear throughout the catalog, including the new PII Processing and Transparency (PT) family."},
-        {"pid": "nist-r5-p4", "locator": "Chapter 3, AC-2",
-         "text": "NIST SP 800-53 Rev. 5. AC-2 ACCOUNT MANAGEMENT. Control: a. Define and document the types of accounts allowed and specifically prohibited for use within the system; b. Assign account managers; c. Require organization-defined prerequisites and criteria for group and role membership."},
-        {"pid": "nist-r5-p5", "locator": "Chapter 3, IA family (as originally published, September 2020)",
-         "text": "NIST SP 800-53 Rev. 5. The Identification and Authentication (IA) family contains controls IA-1 Policy and Procedures through IA-12 Identity Proofing. IA-12 requires identity proofing of users who require accounts for logical access to systems based on appropriate identity assurance level requirements."}
+        {"pid": "nist-r5-p1", "locator": "Chapter 2, Section 2.2 and Table 1 (security and privacy control families)",
+         "text": "NIST SP 800-53, REV. 5 2.2 CONTROL STRUCTURE AND ORGANIZATION Security and privacy controls described in this publication have a well-defined organization and structure. For ease of use in the security and privacy control selection and specification process, controls are organized into 20 families. Each family contains controls that are related to the specific topic of the family. A two-character identifier uniquely identifies each control family (e.g., PS for Personnel Security). Table 1 lists the security and privacy control families and their associated family identifiers. TABLE 1: SECURITY AND PRIVACY CONTROL FAMILIES AC Access Control; AT Awareness and Training; AU Audit and Accountability; CA Assessment, Authorization, and Monitoring; CM Configuration Management; CP Contingency Planning; IA Identification and Authentication; IR Incident Response; MA Maintenance; MP Media Protection; PE Physical and Environmental Protection; PL Planning; PM Program Management; PS Personnel Security; PT PII Processing and Transparency; RA Risk Assessment; SA System and Services Acquisition; SC System and Communications Protection; SI System and Information Integrity; SR Supply Chain Risk Management;"},
+        {"pid": "nist-r5-p2", "locator": "Chapter 3, SA-12 (withdrawn) and Section 3.20 Supply Chain Risk Management (SR-1, SR-2)",
+         "text": "NIST SP 800-53, REV. 5 SA-12 SUPPLY CHAIN PROTECTION [Withdrawn: Incorporated into SR Family.] 3.20 SUPPLY CHAIN RISK MANAGEMENT SR-1 POLICY AND PROCEDURES SR-2 SUPPLY CHAIN RISK MANAGEMENT PLAN"},
+        {"pid": "nist-r5-p3", "locator": "Foreword (most significant changes in Revision 5)",
+         "text": "NIST SP 800-53, REV. 5 Revision 5 of this foundational NIST publication represents a multi-year effort to develop the next generation of security and privacy controls that will be needed to accomplish the above objectives. The most significant changes to this publication include: • Making the controls more outcome-based by removing the entity responsible for satisfying the control (i.e., information system, organization) from the control statement; • Integrating information security and privacy controls into a seamless, consolidated control catalog for information systems and organizations; • Establishing a new supply chain risk management control family;"},
+        {"pid": "nist-r5-p4", "locator": "Chapter 3, AC-2 Account Management (control statement, items a-c)",
+         "text": "NIST SP 800-53, REV. 5 AC-2 ACCOUNT MANAGEMENT Control: a. Define and document the types of accounts allowed and specifically prohibited for use within the system; b. Assign account managers; c. Require [Assignment: organization-defined prerequisites and criteria] for group and role membership;"},
+        {"pid": "nist-r5-p5", "locator": "Appendix C, Table C-7 (Identification and Authentication family, base controls), as published September 2020 with updates as of 12-10-2020",
+         "text": "NIST SP 800-53, REV. 5 TABLE C-7: IDENTIFICATION AND AUTHENTICATION FAMILY IA-1 Policy and Procedures; IA-2 Identification and Authentication (Organizational Users); IA-3 Device Identification and Authentication; IA-4 Identifier Management; IA-5 Authenticator Management; IA-6 Authentication Feedback; IA-7 Cryptographic Module Authentication; IA-8 Identification and Authentication (Non-Organizational Users); IA-9 Service Identification and Authentication; IA-10 Adaptive Authentication; IA-11 Re-authentication; IA-12 Identity Proofing;"},
+        {"pid": "nist-r5-p6", "locator": "Appendix C, Table C-17 (System and Services Acquisition family, base controls), as published September 2020 with updates as of 12-10-2020",
+         "text": "NIST SP 800-53, REV. 5 TABLE C-17: SYSTEM AND SERVICES ACQUISITION FAMILY SA-1 Policy and Procedures; SA-2 Allocation of Resources; SA-3 System Development Life Cycle; SA-4 Acquisition Process; SA-5 System Documentation; SA-6 Software Usage Restrictions; SA-7 User-Installed Software; SA-8 Security and Privacy Engineering Principles; SA-9 External System Services; SA-10 Developer Configuration Management; SA-11 Developer Testing and Evaluation; SA-12 Supply Chain Protection; SA-13 Trustworthiness; SA-14 Criticality Analysis; SA-15 Development Process, Standards, and Tools; SA-16 Developer-Provided Training; SA-17 Developer Security and Privacy Architecture and Design; SA-18 Tamper Resistance and Detection; SA-19 Component Authenticity; SA-20 Customized Development of Critical Components; SA-21 Developer Screening; SA-22 Unsupported System Components; SA-23 Specialization;"},
+        {"pid": "nist-r5-p7", "locator": "Chapter 3, SI-2 Flaw Remediation control enhancements (1)-(6), as published September 2020 with updates as of 12-10-2020",
+         "text": "NIST SP 800-53, REV. 5 SI-2 FLAW REMEDIATION Control Enhancements: (1) FLAW REMEDIATION | CENTRAL MANAGEMENT [Withdrawn: Incorporated into PL-9.] (2) FLAW REMEDIATION | AUTOMATED FLAW REMEDIATION STATUS (3) FLAW REMEDIATION | TIME TO REMEDIATE FLAWS AND BENCHMARKS FOR CORRECTIVE ACTIONS (4) FLAW REMEDIATION | AUTOMATED PATCH MANAGEMENT TOOLS (5) FLAW REMEDIATION | AUTOMATIC SOFTWARE AND FIRMWARE UPDATES (6) FLAW REMEDIATION | REMOVAL OF PREVIOUS VERSIONS OF SOFTWARE AND FIRMWARE Remove previous versions of [Assignment: organization-defined software and firmware components] after updated versions have been installed."},
+        {"pid": "nist-r5-p8", "locator": "Appendix C, Table C-17 (SA-15 Development Process, Standards, and Tools and its enhancements), as published September 2020 with updates as of 12-10-2020",
+         "text": "NIST SP 800-53, REV. 5 TABLE C-17: SYSTEM AND SERVICES ACQUISITION FAMILY SA-15 Development Process, Standards, and Tools; SA-15(1) QUALITY METRICS; SA-15(2) SECURITY AND PRIVACY TRACKING TOOLS; SA-15(3) CRITICALITY ANALYSIS; SA-15(4) THREAT MODELING AND VULNERABILITY ANALYSIS W: Incorporated into SA-11(2).; SA-15(5) ATTACK SURFACE REDUCTION; SA-15(6) CONTINUOUS IMPROVEMENT; SA-15(7) AUTOMATED VULNERABILITY ANALYSIS; SA-15(8) REUSE OF THREAT AND VULNERABILITY INFORMATION; SA-15(9) USE OF LIVE DATA W: Incorporated into SA-3(2).; SA-15(10) INCIDENT RESPONSE PLAN; SA-15(11) ARCHIVE SYSTEM OR COMPONENT; SA-15(12) MINIMIZE PERSONALLY IDENTIFIABLE INFORMATION;"}
       ]
     },
     {
       "doc_id": "nist-undated", "family": "NIST-SP-800-53", "default_pool": false, "variant_of": "nist-r4",
       "filename": "SP800-53.pdf", "title": "NIST SP 800-53: Security and Privacy Controls",
-      "source_url": "derived from nist-r4 with revision numbers and dates removed",
+      "source_url": "derived from nist-r4 (Section 2.2/Table 1 and Appendix J passages) with the 'Special Publication 800-53 Revision 4' running header removed",
       "ingest": {"date": "unknown", "version": "unknown", "status": "unknown"},
       "passages": [
-        {"pid": "nist-undated-p1", "locator": "Section 2.2, Table 1",
-         "text": "NIST SP 800-53. Security controls are organized into eighteen families. Each family contains controls related to the general security topic of the family. The families are: Access Control (AC), Awareness and Training (AT), Audit and Accountability (AU), Security Assessment and Authorization (CA), Configuration Management (CM), Contingency Planning (CP), Identification and Authentication (IA), Incident Response (IR), Maintenance (MA), Media Protection (MP), Physical and Environmental Protection (PE), Planning (PL), Program Management (PM), Personnel Security (PS), Risk Assessment (RA), System and Services Acquisition (SA), System and Communications Protection (SC), and System and Information Integrity (SI)."},
-        {"pid": "nist-undated-p2", "locator": "Appendix J, Privacy Control Catalog",
-         "text": "NIST SP 800-53, Appendix J. Privacy controls are provided in a separate privacy control catalog in Appendix J, organized into eight families: Authority and Purpose (AP), Accountability, Audit, and Risk Management (AR), Data Quality and Integrity (DI), Data Minimization and Retention (DM), Individual Participation and Redress (IP), Security (SE), Transparency (TR), and Use Limitation (UL)."}
+        {"pid": "nist-undated-p1", "locator": "Chapter 2, Section 2.2 and Table 1 (security control identifiers and family names)",
+         "text": "2.2 SECURITY CONTROL STRUCTURE Security controls described in this publication have a well-defined organization and structure. For ease of use in the security control selection and specification process, controls are organized into eighteen families. Each family contains security controls related to the general security topic of the family. A two-character identifier uniquely identifies security control families, for example, PS (Personnel Security). Table 1 lists the security control families and the associated family identifiers in the security control catalog. TABLE 1: SECURITY CONTROL IDENTIFIERS AND FAMILY NAMES AC Access Control; AT Awareness and Training; AU Audit and Accountability; CA Security Assessment and Authorization; CM Configuration Management; CP Contingency Planning; IA Identification and Authentication; IR Incident Response; MA Maintenance; MP Media Protection; PE Physical and Environmental Protection; PL Planning; PS Personnel Security; RA Risk Assessment; SA System and Services Acquisition; SC System and Communications Protection; SI System and Information Integrity; PM Program Management;"},
+        {"pid": "nist-undated-p2", "locator": "Appendix J, Privacy Control Catalog, introduction and Table J-1 (family names)",
+         "text": "APPENDIX J PRIVACY CONTROL CATALOG There are eight privacy control families, each aligning with one of the FIPPs. TABLE J-1: SUMMARY OF PRIVACY CONTROLS BY FAMILY AP Authority and Purpose; AR Accountability, Audit, and Risk Management; DI Data Quality and Integrity; DM Data Minimization and Retention; IP Individual Participation and Redress; SE Security; TR Transparency; UL Use Limitation;"}
       ]
     },
     {
       "doc_id": "nist-c7", "family": "NIST-SP-800-53", "default_pool": false, "variant_of": "nist-r4",
       "filename": "NIST.SP.800-53r5.pdf", "title": "NIST SP 800-53 Revision 5: Security and Privacy Controls for Information Systems and Organizations",
-      "source_url": "nist-r4 content saved under the Rev 5 filename (filename/header mismatch)",
+      "source_url": "nist-r4 Section 2.2/Table 1 passage, verbatim with its 'Revision 4' running header, saved under the Rev 5 filename and title (filename/header mismatch)",
       "ingest": {"date": "2020-09-23", "version": "Rev 5", "status": "active"},
       "passages": [
-        {"pid": "nist-c7-p1", "locator": "Section 2.2, Table 1",
-         "text": "NIST SP 800-53 Revision 4 (April 2013). Security controls are organized into eighteen families. Each family contains controls related to the general security topic of the family. The families are: Access Control (AC), Awareness and Training (AT), Audit and Accountability (AU), Security Assessment and Authorization (CA), Configuration Management (CM), Contingency Planning (CP), Identification and Authentication (IA), Incident Response (IR), Maintenance (MA), Media Protection (MP), Physical and Environmental Protection (PE), Planning (PL), Program Management (PM), Personnel Security (PS), Risk Assessment (RA), System and Services Acquisition (SA), System and Communications Protection (SC), and System and Information Integrity (SI)."}
+        {"pid": "nist-c7-p1", "locator": "Chapter 2, Section 2.2 and Table 1 (security control identifiers and family names)",
+         "text": "Special Publication 800-53 Revision 4 2.2 SECURITY CONTROL STRUCTURE Security controls described in this publication have a well-defined organization and structure. For ease of use in the security control selection and specification process, controls are organized into eighteen families. Each family contains security controls related to the general security topic of the family. A two-character identifier uniquely identifies security control families, for example, PS (Personnel Security). Table 1 lists the security control families and the associated family identifiers in the security control catalog. TABLE 1: SECURITY CONTROL IDENTIFIERS AND FAMILY NAMES AC Access Control; AT Awareness and Training; AU Audit and Accountability; CA Security Assessment and Authorization; CM Configuration Management; CP Contingency Planning; IA Identification and Authentication; IR Incident Response; MA Maintenance; MP Media Protection; PE Physical and Environmental Protection; PL Planning; PS Personnel Security; RA Risk Assessment; SA System and Services Acquisition; SC System and Communications Protection; SI System and Information Integrity; PM Program Management;"}
       ]
     },
 
     {
       "doc_id": "gsa-fy24", "family": "GSA-PER-DIEM", "default_pool": false,
       "filename": "FY2024_PerDiem_Rates.pdf", "title": "GSA Per Diem Rates, Fiscal Year 2024",
-      "source_url": "https://www.gsa.gov/travel/plan-book/per-diem-rates (FY2024 rates file)",
+      "source_url": "https://www.gsa.gov/system/files/FY2024PerDiemRatesHighlights_09272023.docx ; https://www.gsa.gov/system/files/FY%202022%20MIE%20Breakdown_0.docx",
       "ingest": {"date": "2023-10-01", "version": "FY2024", "status": "active"},
       "passages": [
-        {"pid": "gsa-fy24-p1", "locator": "FY2024 rates bulletin, standard CONUS rate",
-         "text": "GSA FY 2024 per diem rates, effective October 1, 2023. The standard CONUS per diem rate applies to about 2,600 counties not designated as non-standard areas. Standard lodging rate: $107 per night. Standard meals and incidental expenses (M&IE) rate: $59 per day."},
-        {"pid": "gsa-fy24-p2", "locator": "FY2024 M&IE breakdown table, $59 tier",
-         "text": "GSA FY 2024 M&IE breakdown. For the $59 M&IE tier: breakfast $13, lunch $15, dinner $26, incidental expenses $5. The amount for the first and last calendar day of travel is calculated at 75 percent of the M&IE rate: $44.25."}
+        {"pid": "gsa-fy24-p1", "locator": "FY 2024 Per Diem Highlights (standard CONUS rate)",
+         "text": "FY 2024 Per Diem Highlights Federal per diem rates consist of a maximum lodging allowance component and a meals and incidental expenses (M&IE) component. Most of CONUS (approximately 2,600 counties) is covered by the standard rate of $166 ($107 lodging, $59 M&IE). The M&IE per diem tiers for FY 2024 are unchanged at $59-$79, with the standard M&IE rate unchanged at $59."},
+        {"pid": "gsa-fy24-p2", "locator": "M&IE Breakdown, FY 2022 – FY 2024 ($59 row and first/last day note)",
+         "text": "M&IE Breakdown, FY 2022 – FY 2024 M&IE Total (1): $59 | Continental Breakfast/ Breakfast (2): $13 | Lunch (2): $15 | Dinner (2): $26 | Incidental Expenses: $5 | First and Last Day (3): $44.25 This column lists the amount federal employees receive for the first and last calendar day of travel. The first and last calendar day of travel is calculated at 75 percent."}
       ]
     },
     {
       "doc_id": "gsa-fy25", "family": "GSA-PER-DIEM", "default_pool": true,
       "filename": "FY2025_PerDiem_Rates.pdf", "title": "GSA Per Diem Rates, Fiscal Year 2025",
-      "source_url": "https://www.gsa.gov/travel/plan-book/per-diem-rates (FY2025 rates file)",
+      "source_url": "https://www.gsa.gov/system/files/FY2025PerDiemRatesHighlights.docx ; https://www.gsa.gov/system/files/FY%202025%20MIE%20Breakdown.docx",
       "ingest": {"date": "2024-10-01", "version": "FY2025", "status": "active"},
       "passages": [
-        {"pid": "gsa-fy25-p1", "locator": "FY2025 rates bulletin, standard CONUS rate",
-         "text": "GSA FY 2025 per diem rates, effective October 1, 2024. The standard CONUS per diem rate applies to about 2,600 counties not designated as non-standard areas. Standard lodging rate: $110 per night. Standard meals and incidental expenses (M&IE) rate: $68 per day."},
-        {"pid": "gsa-fy25-p2", "locator": "FY2025 M&IE breakdown table, $68 tier",
-         "text": "GSA FY 2025 M&IE breakdown. For the $68 M&IE tier: breakfast $16, lunch $19, dinner $28, incidental expenses $5. The amount for the first and last calendar day of travel is calculated at 75 percent of the M&IE rate: $51.00."}
-      ]
-    },
-
-    {
-      "doc_id": "fm30-2017", "family": "ARMY-FM-3-0", "default_pool": false,
-      "filename": "FM3-0_2017.pdf", "title": "FM 3-0 Operations (October 2017)",
-      "source_url": "Army Publishing Directorate archive, FM 3-0 dated 6 October 2017",
-      "ingest": {"date": "2017-10-06", "version": "2017", "status": "active"},
-      "passages": [
-        {"pid": "fm30-2017-p1", "locator": "Front matter and Chapter 1 (operational concept)",
-         "text": "FM 3-0, Operations, 6 October 2017. The Army's operational concept is unified land operations: the simultaneous execution of offense, defense, stability, and defense support of civil authorities across multiple domains to shape operational environments, prevent conflict, prevail in large-scale ground combat, and consolidate gains as part of unified action."},
-        {"pid": "fm30-2017-p2", "locator": "Chapter 1, Army strategic roles",
-         "text": "FM 3-0 (2017). The Army's strategic roles are to shape operational environments, prevent conflict, conduct large-scale ground combat, and consolidate gains. The Army accomplishes these roles as part of the joint force."}
-      ]
-    },
-    {
-      "doc_id": "fm30-2022", "family": "ARMY-FM-3-0", "default_pool": true,
-      "filename": "FM3-0_2022.pdf", "title": "FM 3-0 Operations (October 2022)",
-      "source_url": "https://armypubs.army.mil (FM 3-0, 1 October 2022)",
-      "ingest": {"date": "2022-10-01", "version": "2022", "status": "active"},
-      "passages": [
-        {"pid": "fm30-2022-p1", "locator": "Front matter (supersession statement) and Chapter 1",
-         "text": "FM 3-0, Operations, 1 October 2022. This publication supersedes FM 3-0, dated 6 October 2017. Multidomain operations are the Army's contribution to joint campaigns, spanning the competition continuum. Multidomain operations replace unified land operations as the Army's operational concept."},
-        {"pid": "fm30-2022-p2", "locator": "Chapter 1, Army strategic roles",
-         "text": "FM 3-0 (2022). The Army's strategic roles are to shape operational environments, prevent conflict, prevail in large-scale ground combat, and consolidate gains. Army forces perform these roles as part of the joint force across the land, maritime, air, space, and cyberspace domains."}
-      ]
-    },
-    {
-      "doc_id": "fm30-c7", "family": "ARMY-FM-3-0", "default_pool": false, "variant_of": "fm30-2017",
-      "filename": "FM3-0_2022.pdf", "title": "FM 3-0 Operations (October 2022)",
-      "source_url": "fm30-2017 content saved under the 2022 filename (filename/header mismatch)",
-      "ingest": {"date": "2022-10-01", "version": "2022", "status": "active"},
-      "passages": [
-        {"pid": "fm30-c7-p1", "locator": "Front matter and Chapter 1",
-         "text": "FM 3-0, Operations, 6 October 2017. The Army's operational concept is unified land operations: the simultaneous execution of offense, defense, stability, and defense support of civil authorities across multiple domains to shape operational environments, prevent conflict, prevail in large-scale ground combat, and consolidate gains as part of unified action."}
-      ]
-    },
-
-    {
-      "doc_id": "nispom-base", "family": "DOD-5220.22-M", "default_pool": true,
-      "filename": "DoD5220.22-M_NISPOM.pdf", "title": "DoD 5220.22-M National Industrial Security Program Operating Manual (NISPOM), February 28, 2006",
-      "source_url": "https://www.esd.whs.mil (DoD 5220.22-M, base text of February 28, 2006, before Change 1 and Change 2)",
-      "ingest": {"date": "2006-02-28", "version": "February 28, 2006", "status": "active"},
-      "passages": [
-        {"pid": "nispom-base-p1", "locator": "Chapter 1, Section 2, para 1-201 (Facility Security Officer)",
-         "text": "DoD 5220.22-M, February 28, 2006. 1-201. Facility Security Officer (FSO). Contractors shall appoint a U.S. citizen employee, who is cleared as part of the facility clearance, to be the FSO to supervise and direct security measures necessary for implementing applicable requirements of this Manual."},
-        {"pid": "nispom-base-p2", "locator": "Chapter 1, Section 2, para 1-202 (Standard Practice Procedures)",
-         "text": "DoD 5220.22-M, February 28, 2006. 1-202. Standard Practice Procedures. The contractor shall implement all applicable provisions of this Manual at each of its cleared facilities. Written procedures shall be prepared when the FSO believes them to be necessary for the effective implementation of this Manual. The contractor's program shall cover security education, reporting requirements, and the protection of classified information."},
-        {"pid": "nispom-base-p3", "locator": "Chapter 3, Section 1 (Security Training and Briefings)",
-         "text": "DoD 5220.22-M, February 28, 2006. Chapter 3. Contractors shall provide all cleared employees with security training and briefings commensurate with their involvement with classified information, including an initial security briefing before access and refresher briefings at least annually."}
+        {"pid": "gsa-fy25-p1", "locator": "FY 2025 per diem highlights (standard CONUS rate)",
+         "text": "FY 2025 per diem highlights Federal per diem rates consist of a maximum lodging allowance component and a meals and incidental expenses (M&IE) component. The standard rate of $178 ($110 lodging, $68 M&IE) applies to most of CONUS."},
+        {"pid": "gsa-fy25-p2", "locator": "M&IE breakdowns for continental U.S. (CONUS), FY 2025 ($68 row)",
+         "text": "M&IE breakdowns for continental U.S. (CONUS), FY 2025 M&IE Total: $68 | Breakfast: $16 | Lunch: $19 | Dinner: $28 | Incidental Expenses: $5 | First & Last Day of Travel: $51.00"}
       ]
     },
 
     {
       "doc_id": "pandas-1.5", "family": "PANDAS-DOCS", "default_pool": false,
       "filename": "pandas-docs-1.5.pdf", "title": "pandas 1.5 API reference",
-      "source_url": "https://pandas.pydata.org/pandas-docs/version/1.5/",
+      "source_url": "https://pandas.pydata.org/pandas-docs/version/1.5/ (reference/api/pandas.DataFrame.append.html, pandas.Series.iteritems.html, pandas.DataFrame.merge.html, whatsnew/v1.0.0.html)",
       "ingest": {"date": "unknown", "version": "1.5", "status": "active"},
       "passages": [
-        {"pid": "pandas-1.5-p1", "locator": "API reference, pandas.DataFrame.append",
-         "text": "pandas 1.5 documentation. DataFrame.append(other, ignore_index=False, verify_integrity=False, sort=False): Append rows of other to the end of caller, returning a new object. Deprecated since version 1.4.0: Use pandas.concat() instead. Calling append emits a FutureWarning."},
-        {"pid": "pandas-1.5-p2", "locator": "API reference, pandas.Series.iteritems",
-         "text": "pandas 1.5 documentation. Series.iteritems(): Lazily iterate over (index, value) tuples. Deprecated since version 1.5.0: iteritems is deprecated and will be removed in a future version. Use .items instead."},
-        {"pid": "pandas-1.5-p3", "locator": "API reference, pandas.Series constructor",
-         "text": "pandas 1.5 documentation. pandas.Series(data=None, index=None, dtype=None, ...). When data is empty and no dtype is given, the default dtype of the empty Series is float64; a DeprecationWarning notes that the default dtype for empty Series will be object instead of float64 in a future version."},
-        {"pid": "pandas-1.5-p4", "locator": "API reference, pandas.DataFrame.merge",
-         "text": "pandas 1.5 documentation. DataFrame.merge(right, how='inner', on=None, ...). how: {'left', 'right', 'outer', 'inner', 'cross'}, default 'inner'. Type of merge to be performed."}
+        {"pid": "pandas-1.5-p1", "locator": "API reference, pandas.DataFrame.append (pandas 1.5.3 documentation)",
+         "text": "DataFrame.append(other, ignore_index=False, verify_integrity=False, sort=False) Append rows of other to the end of caller, returning a new object. Deprecated since version 1.4.0: Use concat() instead. For further details see Deprecated DataFrame.append and Series.append Columns in other that are not in the caller are added as new columns."},
+        {"pid": "pandas-1.5-p2", "locator": "API reference, pandas.Series.iteritems (pandas 1.5.3 documentation)",
+         "text": "Series.iteritems() Lazily iterate over (index, value) tuples. Deprecated since version 1.5.0: iteritems is deprecated and will be removed in a future version. Use .items instead. This method returns an iterable tuple (index, value). This is convenient if you want to create a lazy iterator."},
+        {"pid": "pandas-1.5-p3", "locator": "What's new in 1.0.0, Default dtype of empty pandas.Series (pandas 1.5.3 documentation)",
+         "text": "Default dtype of empty pandas.Series Initialising an empty pandas.Series without specifying a dtype will raise a DeprecationWarning now (GH17261). The default dtype will change from float64 to object in future releases so that it is consistent with the behaviour of DataFrame and Index."},
+        {"pid": "pandas-1.5-p4", "locator": "API reference, pandas.DataFrame.merge (pandas 1.5.3 documentation)",
+         "text": "Merge DataFrame or named Series objects with a database-style join. how {'left', 'right', 'outer', 'inner', 'cross'}, default 'inner' Type of merge to be performed."}
       ]
     },
     {
       "doc_id": "pandas-2.0", "family": "PANDAS-DOCS", "default_pool": true,
       "filename": "pandas-docs-2.0.pdf", "title": "pandas 2.0 API reference",
-      "source_url": "https://pandas.pydata.org/pandas-docs/version/2.0/",
+      "source_url": "https://pandas.pydata.org/pandas-docs/version/2.0/ (whatsnew/v2.0.0.html, reference/api/pandas.DataFrame.merge.html)",
       "ingest": {"date": "unknown", "version": "2.0", "status": "active"},
       "passages": [
-        {"pid": "pandas-2.0-p1", "locator": "What's new in 2.0.0, Removal of prior version deprecations",
-         "text": "pandas 2.0.0 release notes, Removal of prior version deprecations/changes. Removed deprecated DataFrame.append() and Series.append(); use pandas.concat() instead. Removed deprecated Series.iteritems() and DataFrame.iteritems(); use .items() instead."},
-        {"pid": "pandas-2.0-p2", "locator": "What's new in 2.0.0, Empty Series default dtype",
-         "text": "pandas 2.0.0 release notes. Changed behavior: the default dtype of an empty Series or DataFrame constructed without an explicit dtype is now object instead of float64."},
-        {"pid": "pandas-2.0-p3", "locator": "API reference, pandas.DataFrame.merge",
-         "text": "pandas 2.0 documentation. DataFrame.merge(right, how='inner', on=None, ...). how: {'left', 'right', 'outer', 'inner', 'cross'}, default 'inner'. Type of merge to be performed."}
+        {"pid": "pandas-2.0-p1", "locator": "What's new in 2.0.0, Removal of prior version deprecations/changes",
+         "text": "What's new in 2.0.0 (April 3, 2023) Removed deprecated Series.append(), DataFrame.append(), use concat() instead (GH35407) Removed deprecated Series.iteritems(), DataFrame.iteritems() and HDFStore.iteritems() use obj.items instead (GH45321)"},
+        {"pid": "pandas-2.0-p2", "locator": "What's new in 2.0.0, Removal of prior version deprecations/changes (empty Series dtype)",
+         "text": "What's new in 2.0.0 (April 3, 2023) Changed behavior of empty data passed into Series; the default dtype will be object instead of float64 (GH29405)"},
+        {"pid": "pandas-2.0-p3", "locator": "API reference, pandas.DataFrame.merge (pandas 2.0.3 documentation)",
+         "text": "Merge DataFrame or named Series objects with a database-style join. how {'left', 'right', 'outer', 'inner', 'cross'}, default 'inner' Type of merge to be performed."}
       ]
     },
     {
       "doc_id": "pandas-undated", "family": "PANDAS-DOCS", "default_pool": false, "variant_of": "pandas-1.5",
       "filename": "pandas-docs.pdf", "title": "pandas API reference",
-      "source_url": "derived from pandas-1.5 with version numbers removed",
+      "source_url": "derived from pandas-1.5 (DataFrame.append page) with the version removed: 'Deprecated since version 1.4.0:' -> 'Deprecated:'",
       "ingest": {"date": "unknown", "version": "unknown", "status": "unknown"},
       "passages": [
-        {"pid": "pandas-undated-p1", "locator": "API reference, pandas.DataFrame.append",
-         "text": "pandas documentation. DataFrame.append(other, ignore_index=False, verify_integrity=False, sort=False): Append rows of other to the end of caller, returning a new object. Deprecated: Use pandas.concat() instead. Calling append emits a FutureWarning."}
+        {"pid": "pandas-undated-p1", "locator": "API reference, pandas.DataFrame.append (pandas 1.5.3 documentation)",
+         "text": "DataFrame.append(other, ignore_index=False, verify_integrity=False, sort=False) Append rows of other to the end of caller, returning a new object. Deprecated: Use concat() instead. For further details see Deprecated DataFrame.append and Series.append Columns in other that are not in the caller are added as new columns."}
       ]
     },
 
     {
       "doc_id": "numpy-1.26", "family": "NUMPY-DOCS", "default_pool": false,
       "filename": "numpy-docs-1.26.pdf", "title": "NumPy 1.26 reference",
-      "source_url": "https://numpy.org/doc/1.26/",
+      "source_url": "https://numpy.org/doc/1.26/ (reference/constants.html, reference/arrays.scalars.html)",
       "ingest": {"date": "unknown", "version": "1.26", "status": "active"},
       "passages": [
-        {"pid": "numpy-1.26-p1", "locator": "Reference, Constants (numpy.nan and aliases)",
-         "text": "NumPy 1.26 reference, Constants. numpy.nan: IEEE 754 floating point representation of Not a Number (NaN). NaN and NAN are equivalent definitions of nan; please use nan instead of NAN."},
-        {"pid": "numpy-1.26-p2", "locator": "Reference, Scalars (numpy.float_)",
-         "text": "NumPy 1.26 reference, Scalars. numpy.float_ is an alias for numpy.double (numpy.float64): double-precision floating-point number type, compatible with Python float and C double."}
+        {"pid": "numpy-1.26-p1", "locator": "Reference, Constants, numpy.NaN (NumPy v1.26 Manual)",
+         "text": "numpy.NaN IEEE 754 floating point representation of Not a Number (NaN). NaN and NAN are equivalent definitions of nan. Please use nan instead of NaN."},
+        {"pid": "numpy-1.26-p2", "locator": "Reference, Scalars, numpy.double (NumPy v1.26 Manual)",
+         "text": "class numpy.double(x=0, /) Double-precision floating-point number type, compatible with Python float and C double. Character code: 'd' Alias: numpy.float_ Alias on this platform (Linux x86_64): numpy.float64: 64-bit precision floating-point number type: sign bit, 11 bits exponent, 52 bits mantissa."}
       ]
     },
     {
       "doc_id": "numpy-2.0", "family": "NUMPY-DOCS", "default_pool": true,
       "filename": "numpy-docs-2.0.pdf", "title": "NumPy 2.0 release notes and reference",
-      "source_url": "https://numpy.org/doc/2.0/release/2.0.0-notes.html",
+      "source_url": "https://numpy.org/doc/2.0/ (release/2.0.0-notes.html, reference/constants.html)",
       "ingest": {"date": "unknown", "version": "2.0", "status": "active"},
       "passages": [
-        {"pid": "numpy-2.0-p1", "locator": "NumPy 2.0.0 release notes, Python API cleanup (NEP 52)",
-         "text": "NumPy 2.0.0 release notes, NEP 52 namespace cleanup. A number of aliases were removed from the main namespace: np.NaN and np.NAN were removed, use np.nan instead; np.float_ was removed, use np.float64 instead; np.Inf and np.Infinity were removed, use np.inf instead."},
-        {"pid": "numpy-2.0-p2", "locator": "Reference, Constants (numpy.nan)",
-         "text": "NumPy 2.0 reference, Constants. numpy.nan: IEEE 754 floating point representation of Not a Number (NaN)."}
+        {"pid": "numpy-2.0-p1", "locator": "NumPy 2.0.0 Release Notes, NumPy 2.0 Python API removals",
+         "text": "NumPy 2.0.0 Release Notes NumPy 2.0 Python API removals Alias np.float_ has been removed. Use np.float64 instead. Alias np.Inf has been removed. Use np.inf instead. Alias np.NaN has been removed. Use np.nan instead."},
+        {"pid": "numpy-2.0-p2", "locator": "Reference, Constants, numpy.nan (NumPy v2.0 Manual)",
+         "text": "numpy.nan IEEE 754 floating point representation of Not a Number (NaN). Returns y : A floating point representation of Not a Number."}
       ]
     }
   ]

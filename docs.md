@@ -119,7 +119,7 @@ How the case types are built from the corpus:
 | C1 | old and new versions | old is superseded, new is current |
 | C2 | old version only | old is superseded by a version that isn't in the corpus |
 | C3 | an undated variant (`*-undated`) | can't match a version, so it lists all known versions |
-| C4 | base text only (NISPOM, NIST Rev 5 as first published) | current, but lists in-place changes dated later |
+| C4 | base text only (NIST Rev 5 as published in 2020) | current, but lists in-place releases dated later (5.1.1, 5.2.0) |
 | C5 | old and new; the question names the old one | as C1 |
 | C6 | old and new; the value is the same in both | as C1 |
 | C7 | a doc whose filename/title say one version and whose text says another (`*-c7`) | the version from the filename, i.e. "current" |

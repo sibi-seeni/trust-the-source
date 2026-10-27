@@ -66,17 +66,15 @@ There are two extra conditions:
 
 ### Document families
 
-The corpus has 19 documents across 7 families. Each family has at least two versions, so both dated and undated version signals can be tested.
+The corpus has 15 documents across 5 families. Each family has at least two versions, so both dated and undated version signals can be tested. D4 (Army FM 3-0) and D5 (NISPOM) were dropped because no primary copy of them could be fetched to verify against (see [Data verification](#data-verification)); the labels are kept so older notes still line up.
 
 | # | Family | Docs in corpus | Version signal | Why it's included |
 |---|---|---|---|---|
 | D1 | IRS Form 1040 Instructions, 2024 vs 2025 | `irs-2024`, `irs-2025` | tax year in the title | continuity with the MVP; annual numeric changes |
-| D2 | NIST SP 800-53 Rev 4 vs Rev 5 | `nist-r4`, `nist-r5` | revision number; Rev 4 withdrawn | standards and controls; closest to DoD security documentation |
+| D2 | NIST SP 800-53 Rev 4 vs Rev 5 | `nist-r4`, `nist-r5` | revision number; Rev 4 withdrawn; Rev 5 amended in place by Releases 5.1.1 and 5.2.0 | standards and controls; closest to DoD security documentation; also carries the "same designation, amended in place" case |
 | D3 | GSA per diem rates, FY2024 vs FY2025 | `gsa-fy24`, `gsa-fy25` | fiscal year, table-heavy | numeric tables |
-| D4 | Army FM 3-0, 2017 vs 2022 | `fm30-2017`, `fm30-2022` | "supersedes" statement in front matter | military terminology; a version signal in prose |
-| D5 | DoD 5220.22-M (NISPOM), base text with in-place Changes 1 and 2 | `nispom-base` | same base date, amended in place | the case where checking a date isn't enough |
 | D6 | pandas 1.5 vs 2.0, NumPy 1.26 vs 2.0 | `pandas-1.5`, `pandas-2.0`, `numpy-1.26`, `numpy-2.0` | version number, no date | the version matters, not the date |
-| D7 | undated variants of D1, D2, D6, plus filename/header mismatches | `irs-undated`, `nist-undated`, `pandas-undated`, `irs-c7`, `nist-c7`, `fm30-c7` | none, or contradictory | what happens when there's nothing (or the wrong thing) to check |
+| D7 | undated variants of D1, D2, D6, plus filename/header mismatches | `irs-undated`, `nist-undated`, `pandas-undated`, `irs-c7`, `nist-c7` | none, or contradictory | what happens when there's nothing (or the wrong thing) to check |
 
 ### Case types
 
@@ -84,13 +82,13 @@ Each question gets exactly one case type:
 
 | Case | Situation | Correct behaviour | Questions now |
 |---|---|---|---|
-| C1 | old and new versions both retrieved | answer from the newer version | 10 |
-| C2 | only the old version is in the corpus; the newer one is only in the registry | flag that it's outdated, or give the newer value | 8 |
+| C1 | old and new versions both retrieved | answer from the newer version | 9 |
+| C2 | only the old version is in the corpus; the newer one is only in the registry | flag that it's outdated, or give the newer value | 7 |
 | C3 | the retrieved document has no date or version | flag it as unverifiable; don't answer confidently | 4 |
-| C4 | change notice / errata: same base date, a value was amended | use the amended value, or flag a possible amendment | 3 |
-| C5 | the question asks for the older version ("for tax year 2024…") | answer from the older version. Flagging it or "correcting" it is a **false flag** | 7 |
-| C6 | the value didn't change between versions | answer normally. Any warning is a **false flag** | 7 |
-| C7 | the filename date and the header date disagree | flag the inconsistency | 3 |
+| C4 | change notice / errata: same designation, a later release added or amended content | use the amended content, or flag a possible amendment | 4 |
+| C5 | the question asks for the older version ("for tax year 2024…") | answer from the older version. Flagging it or "correcting" it is a **false flag** | 6 |
+| C6 | the value didn't change between versions | answer normally. Any warning is a **false flag** | 6 |
+| C7 | the filename date and the header date disagree | flag the inconsistency | 2 |
 
 C5 and C6 are what stop a check that just says "always pick newest" from looking good.
 
@@ -122,7 +120,7 @@ The report gives these per model and arm, always together:
 ## Layout
 
 ```
-data/docs.json          corpus: 19 documents across 7 families (D1–D7), passage text + ingestion metadata
+data/docs.json          corpus: 15 documents across 5 families (D1–D3, D6, D7), verbatim passage text + ingestion metadata
 data/questions.json     question set: case type, gold / alternative answers, gold passages, regexes
 data/registry.json      mock version registry
 data/confirm_set.json   written by select-confirm (only if a confirmation round is ever run)
@@ -169,7 +167,7 @@ python -m harness run --stage pilot --name pilot
 # Re-estimate from what the pilot actually used, before committing to the sweep
 python -m harness estimate --from-run pilot
 
-# -- before step 2: verify the data and freeze it (see "Before the main sweep") --
+# -- before step 2: freeze data/ in Git (see "Data verification") --
 
 # 2. Main sweep: all questions x 8 arms x 3 seeds, on both models
 python -m harness run --stage sweep --name sweep
@@ -190,11 +188,11 @@ python -m harness run --stage confirm --models gemini-4-argon --name confirm-arg
 
 What each stage runs:
 
-| Stage | Questions | Arms | Seeds | Condition | Runs per model (42 Qs) |
+| Stage | Questions | Arms | Seeds | Condition | Runs per model (38 Qs) |
 |---|---|---|---|---|---|
 | `pilot` | the 11 with `pilot: true` | A0–A7 | 0 | normal | 88 |
-| `sweep` | all | A0–A7 | 0, 1, 2 | normal | 1,008 |
-| `unavailable` | C1–C2 | A3–A7 | 0 | registry times out | 90 |
+| `sweep` | all | A0–A7 | 0, 1, 2 | normal | 912 |
+| `unavailable` | C1–C2 | A3–A7 | 0 | registry times out | 80 |
 | `live` | the 20 with `live: true` | A3-web | 0 | web search instead of registry | 20 |
 | `confirm` | from `data/confirm_set.json` | from the file (A1, A4, best model-driven arm) | 0, 1 | normal | depends |
 
@@ -249,61 +247,47 @@ Everything for a run lands in `runs/<name>/`:
 
 Because every request and response is logged, any result can be re-scored or audited later without rerunning it. That also covers Avital's "log what was retrieved" point. `results.jsonl` is append-only; the report keeps the latest row per job.
 
-## Before the main sweep
+## Data verification
 
-The data here is a **draft**, meant to be checked before anyone quotes a number from it.
+Every passage in `data/docs.json` is now verbatim text from the official source, and every question is `verified: true`. This was checked on Oct 27, 2026, against these copies:
 
-- **Passages are paraphrased stand-ins.** The source PDFs couldn't be pulled from the environment this was built in, so each passage in `docs.json` is a short paraphrase of the relevant section, with a `source_url` and `locator` to find it. Swap in verbatim text from the real documents.
-- **Every question is `verified: false`.** The gold answers are figures we're confident about, for example the 2025 standard deduction of $15,750 after the 2025 tax law change, Rev 5's 20 control families, and FY2025 per diem of $110 / $68. Someone should still check each one against the source and flip it to `true`. `run --stage sweep` warns while any are unverified.
-- **42 of the ~90 targeted questions are written.** By family: IRS 9, NIST 11, GSA 6, FM 3-0 5, NISPOM 2, pandas 6, NumPy 3. The case mix is about 43% C1–C2, 17% C3–C4, 33% C5–C6 and 7% C7, against the doc's 40 / 20 / 30 / 10. Add more questions in the same format (see below).
-- **D5 is a stand-in.** It uses the NISPOM (DoD 5220.22-M, Feb 28 2006, amended in place by Changes 1 and 2) for the "same base date, amended in place" case. In reality, the NISPOM was replaced by 32 CFR Part 117 in 2021, and the mock registry leaves that out on purpose. A currently active DoDI with a Change notice would be a better D5 if the team has one in mind.
-- **The registry is a frozen universe.** "Latest" means latest *among the versions in this experiment*. FY2026 per diem rates and newer pandas releases are left out on purpose.
+| Family | What it was checked against |
+|---|---|
+| D1 IRS | the 2024 and 2025 Instructions for Form 1040 PDFs on irs.gov |
+| D2 NIST | the Rev 4 and Rev 5 PDFs on nvlpubs.nist.gov (Rev 5 as published Sept 2020 with updates to 12-10-2020), NIST's OSCAL Rev 5 catalog for IA-13 / SA-24 / SA-15(13) / SI-02(07) and the 5.1.1 date, and NIST's *Summary of Changes: SP 800-53 Release 5.2.0* (Aug 27, 2025) |
+| D3 GSA | GSA's FY2024 and FY2025 per diem highlights, FTR Bulletin 25-01 and the M&IE breakdown files |
+| D6 pandas / NumPy | the pandas 1.5.3 and 2.0.3 docs, and the NumPy 1.26 and 2.0 docs |
+
+How the passages were built:
+
+- **Excerpts are copied word for word.** Separate excerpts from the same section are joined with a space. Table rows are rendered from the table cells, as `ID Name;` for NIST and `header: value | ...` for GSA. Each passage's `locator` says where it comes from. Every excerpt was checked against the downloaded text (case-sensitive, ignoring whitespace and punctuation).
+- **`variant_of` documents are deliberate edits.** These are the undated and filename-mismatch (`*-c7`) docs. Each is built from a verified passage, and its `source_url` describes the edit: dropping the tax year, the "Revision 4" running header, or the "since version 1.4.0".
+- **C4 now comes from NIST's in-place releases.** The registry lists Release 5.1.1 (IA-13) and Release 5.2.0 (SA-24, SA-15(13), SI-02(07)). The corpus has Rev 5 as published in 2020, which has none of these.
+
+A few things were deliberately changed or left out:
+
+- **D4 (FM 3-0) and D5 (NISPOM) were dropped**, along with their seven questions.
+  - FM 3-0: the 2022 PDF has been removed from armypubs.army.mil, the 2017 edition isn't hosted there, and the Army now lists a 21 March 2025 edition as active.
+  - NISPOM: esd.whs.mil refuses automated downloads, and the 2006 manual was replaced by 32 CFR Part 117 in 2021. Its Change 2 details could only be confirmed from secondary sources.
+  - Either family can come back if someone supplies the PDFs.
+- **irs-04 was reworded.** It now asks about the age/blindness amount per box checked. That's because the 2025 instructions also add a separate $6,000 senior deduction (Schedule 1-A), which made the old wording ambiguous.
+- **The NumPy 2.0 `numpy.nan` passage leaves out one sentence.** That page still says "NaN and NAN are aliases of nan", which is stale after 2.0 removed `np.NaN`.
+- **38 of the ~90 targeted questions are written.** By family: IRS 9, NIST 14, GSA 6, pandas 6, NumPy 3. The case mix is about 42% C1–C2, 21% C3–C4, 32% C5–C6 and 5% C7, against the doc's 40 / 20 / 30 / 10. Add more questions in the same format (see below), and verify them the same way.
+- **The registry is a frozen universe.** "Latest" means latest *among the versions in this experiment*. FY2026/FY2027 per diem rates, pandas 3.x and newer NumPy releases are left out on purpose.
 - **Freeze `data/` in Git** before the sweep. Each run's `meta.json` records the commit it ran on.
-
-### Adding a question
-
-Add an entry to `data/questions.json`:
-
-```json
-{"id": "irs-10", "family": "IRS-1040-INSTR", "case": "C1", "pilot": false, "live": false, "verified": false,
- "question": "What is the standard deduction for a qualifying surviving spouse?",
- "corpus": ["irs-2024", "irs-2025"], "gold_passages": ["irs-2024-p1", "irs-2025-p1"],
- "gold_answer": "$31,500 (2025 instructions)", "alt_answer": "$29,200 (2024 instructions)",
- "accept": ["\\b31500\\b"], "alt": ["\\b29200\\b"]}
-```
-
-- `corpus` is the docs "in the corpus" for this question. The latest docs of the other families are added automatically as distractors.
-- `gold_passages` must belong to those docs; they're always retrieved.
-- `accept` / `alt` are regexes over the lower-cased answer with `$` and thousands separators removed. Leave both empty for free-text answers, and the judge decides.
-- For C5, `alt_answer` is the newer version's value, i.e. the wrong "correction".
-
-`python -m pytest` checks that every question's corpus, gold passages and regexes hold together. New documents go in `data/docs.json`, and their families must exist in `data/registry.json`.
-
-## Where this differs from the design doc
-
-- **Models:** the main sweep runs on two models in parallel: DeepSeek V4.1 Flash (as in the design doc) and Nemotron 3.5 Super VL. The doc instead had DeepSeek followed by a GPT-6 Luna / Gemini 4 Argon confirmation round, and there's no confirmation round here. The judge is GPT-6 Luna rather than DeepSeek: it's cheap, it's from a different model family from both models under test, and it supports strict JSON-schema output. For a funded run, switch the judge to GPT-6 Sol and add Gemini 4 Argon / Gemini 3.8 Flash with `--models`.
-- **Reasoning effort:** both models under test run at their default effort, as the design doc asks, and Nemotron reasons by default. The judge runs Luna at `low` to keep scoring cheap. `TTS_REASONING_EFFORT` overrides the models under test and `TTS_JUDGE_REASONING_EFFORT` overrides the judge. Whatever is used is logged on every call. GLM 5.3, if used, is set to `low`, because its default is `max`.
-- **Nemotron and tools:** OpenRouter routes requests that include tools only to the Nemotron providers that support tool calling, which is 3 of the 4. Preflight confirms the tool round-trip actually works before you spend anything.
-- **Temperature and seeds:** temperature 0 and a seed are sent on every call and logged. Some models ignore them, notably reasoning models and Gemini 3.8 Flash, which Google says ignores sampling settings. Treat the three seeds as repeated samples for measuring variance, not as a determinism guarantee. The design doc's fixed top‑k isn't sent, because not all of these models support it.
-- **Pinning and providers:** dated slugs are pinned where OpenRouter lists one, so results don't shift mid-run. OpenRouter may still route a model to different providers, so the provider and the exact model version served are logged per call (`provider`, `model_version` in the trace).
-- **Judge:** a rule-based regex match takes precedence wherever the answer is numeric or a short identifier. Luna labels the freshness flags, and the hand-check of 10% + all disagreements still applies, for each model's runs.
-- **Skill (A5):** OpenRouter has no native skill primitive. A skill is simulated as an on-demand instruction load through a tool call that also unlocks the registry tool, which is how skills work in agent harnesses. Say so in the write-up.
-- **Reasoning across tool turns:** tool calling is handled manually. The assistant message is appended to the history exactly as returned, including `reasoning_details`, which OpenRouter needs back for reasoning models (for example, Gemini's thought signatures).
-- **Live web:** OpenRouter's `openrouter:web_search` server tool, which replaced the deprecated `:online` suffix the doc mentions.
-- **Cost:** the cost logged per call is what OpenRouter reports, so it includes web search fees. The price table in `config.py` is only used for estimates and as a fallback.
 
 ## Cost estimate
 
-`python -m harness estimate` prints this table. The token assumptions are about 1,100–1,600 input tokens per call (the base prompt measures about 670) and 400–1,500 output tokens per call. Reasoning tokens are the big unknown. On the current 42 questions, the plan per model is 88 pilot runs, 1,008 sweep runs, 90 registry-unavailable runs and 20 live runs: 1,206 runs per model, 2,412 across both, with one judge call each.
+`python -m harness estimate` prints this table. The token assumptions are about 1,100–1,600 input tokens per call (the base prompt measures about 670) and 400–1,500 output tokens per call. Reasoning tokens are the big unknown. On the current 38 questions, the plan per model is 88 pilot runs, 912 sweep runs, 80 registry-unavailable runs and 20 live runs: 1,100 runs per model, 2,200 across both, with one judge call each.
 
 | | Pilot | Sweep | Unavailable | Live | Total |
 |---|---|---|---|---|---|
-| DeepSeek V4.1 Flash | $0.05–0.15 | $0.56–1.74 | $0.06–0.20 | $0.01–0.03 | **$0.68–2.13** |
-| Nemotron 3.5 Super VL | $0.05–0.13 | $0.54–1.53 | $0.06–0.18 | $0.01–0.03 | **$0.67–1.87** |
-| Judge: GPT-6 Luna, low effort (~250–600 output tokens per label) | | | | | **$0.52–0.94** |
-| **Everything** | | | | | **≈ $1.90–4.95** |
+| DeepSeek V4.1 Flash | $0.05–0.15 | $0.51–1.57 | $0.06–0.18 | $0.01–0.03 | **$0.62–1.94** |
+| Nemotron 3.5 Super VL | $0.05–0.13 | $0.49–1.39 | $0.06–0.16 | $0.01–0.03 | **$0.61–1.71** |
+| Judge: GPT-6 Luna, low effort (~250–600 output tokens per label) | | | | | **$0.47–0.86** |
+| **Everything** | | | | | **≈ $1.70–4.50** |
 
-Add a few cents for embeddings and the live stage's web search fees. At the doc's ~90 questions, everything comes to **≈ $3.80–10.10** (`estimate --questions 90`). For comparison, GPT-6 Sol as the judge would cost about $10–19 on its own at 42 questions.
+Add a few cents for embeddings and the live stage's web search fees. At the doc's ~90 questions, everything comes to **≈ $3.80–10.10** (`estimate --questions 90`). For comparison, GPT-6 Sol as the judge would cost about $9–17 on its own at 38 questions.
 
 After the pilot, `estimate --from-run pilot` redoes the table from the tokens that were actually used, per arm. That's the number to trust before committing to the sweep.
 

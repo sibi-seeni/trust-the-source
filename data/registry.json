@@ -1,5 +1,5 @@
 {
-  "_note": "Mock version registry standing in for an online lookup (design doc section 5). It's a frozen, controlled universe: each family only knows the versions used in this experiment, so 'latest' means latest within the experiment, not necessarily in the real world today (e.g. FY2026 per diem rates, pandas 3.x and the 2021 replacement of the NISPOM by 32 CFR Part 117 are deliberately left out). Verify each entry against the official source before the main sweep.",
+  "_note": "Mock version registry standing in for an online lookup (design doc section 5). It's a frozen, controlled universe: each family only knows the versions used in this experiment, so 'latest' means latest within the experiment, not necessarily in the real world today (e.g. FY2026/FY2027 per diem rates, pandas 3.x and NumPy 2.1+ are deliberately left out). Entries were checked against the official sources (IRS, NIST CSRC and the NIST OSCAL catalog, GSA, pandas and NumPy docs) on Oct 27, 2026.",
   "families": {
     "IRS-1040-INSTR": {
       "aliases": ["form 1040 instructions", "instructions for form 1040", "1040 instructions", "i1040gi", "i1040", "form 1040"],
@@ -15,7 +15,10 @@
       "versions": [
         {"version": "Rev 4", "aliases": ["rev 4", "revision 4", "r4", "800-53r4", "rev. 4"], "effective": "2013-04-30", "status": "withdrawn", "withdrawn": "2021-09-23", "superseded_by": "Rev 5"},
         {"version": "Rev 5", "aliases": ["rev 5", "revision 5", "r5", "800-53r5", "rev. 5"], "effective": "2020-09-23", "status": "current", "superseded_by": null,
-         "changes": [{"release": "5.1.1", "date": "2023-11-07", "summary": "Adds one new control and three control enhancements; editorial changes. The document keeps the Rev 5 designation."}]}
+         "changes": [
+           {"release": "5.1.1", "date": "2023-11-07", "summary": "Adds control IA-13 Identity Providers and Authorization Servers and three control enhancements; editorial changes. The document keeps the Rev 5 designation."},
+           {"release": "5.2.0", "date": "2025-08-27", "summary": "Adds control SA-24 Design for Cyber Resiliency and control enhancements SA-15(13) Logging Syntax and SI-02(07) Root Cause Analysis; revises SI-07(12); updates the discussion of SA-04, SA-05, SA-08(14), SI-02 and SI-02(05). The document keeps the Rev 5 designation."}
+         ]}
       ]
     },
     "GSA-PER-DIEM": {
@@ -24,25 +27,6 @@
       "versions": [
         {"version": "FY2024", "aliases": ["fy2024", "fy 2024", "fiscal year 2024", "2024"], "effective": "2023-10-01", "status": "superseded", "superseded_by": "FY2025"},
         {"version": "FY2025", "aliases": ["fy2025", "fy 2025", "fiscal year 2025", "2025"], "effective": "2024-10-01", "status": "current", "superseded_by": null}
-      ]
-    },
-    "ARMY-FM-3-0": {
-      "aliases": ["fm 3-0", "fm3-0", "field manual 3-0"],
-      "latest": "2022",
-      "versions": [
-        {"version": "2017", "aliases": ["2017", "october 2017", "6 october 2017"], "effective": "2017-10-06", "status": "superseded", "superseded_by": "2022"},
-        {"version": "2022", "aliases": ["2022", "october 2022", "1 october 2022"], "effective": "2022-10-01", "status": "current", "superseded_by": null}
-      ]
-    },
-    "DOD-5220.22-M": {
-      "aliases": ["dod 5220.22-m", "5220.22-m", "nispom", "national industrial security program operating manual"],
-      "latest": "February 28, 2006 (incorporating Change 2)",
-      "versions": [
-        {"version": "February 28, 2006 (incorporating Change 2)", "aliases": ["2006", "february 28, 2006"], "effective": "2006-02-28", "status": "current", "superseded_by": null,
-         "changes": [
-           {"change": 1, "date": "2013-03-28", "summary": "Change 1 amends the manual in place; base date unchanged."},
-           {"change": 2, "date": "2016-05-18", "summary": "Change 2 amends the manual in place; base date unchanged."}
-         ]}
       ]
     },
     "PANDAS-DOCS": {
