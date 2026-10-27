@@ -426,9 +426,12 @@ GPT-6 Luna (low effort) gets the question, the reference answer, the alternative
 | `answer_matches` | `gold`, `alt`, `both`, `neither`, `no_answer`: which value the answer presents as its answer |
 | `flags` | any of `outdated`, `unverifiable`, `inconsistent`, `unable_to_verify`: every freshness warning the answer actually makes |
 | `mentions_newer_version` | whether a newer version is mentioned at all, warning or not |
+| `undermines_answer` | whether the answer casts doubt on its own value: says it may be wrong or not the one to use, declines to give one, or swaps in another version's value |
 | `rationale` | one or two sentences |
 
 Simply citing a source's year isn't a flag, and neither is mentioning a newer value as history. The judge's instructions spell this out, because the line between "useful context" and "false flag" is exactly what C5 and C6 test.
+
+A note that the source has been superseded *is* labelled as an `outdated` flag, because in C2 that note is the warning we want. In C5 and C6 it only becomes a false flag if `undermines_answer` is true, or if the answer doesn't give the requested value. So "$21,900 for 2024; note the 2024 instructions have since been superseded" is `correct`, while "$21,900, but this may be out of date, check the 2025 figure" is a `false_flag`. This rule was set after the pilot and before the sweep.
 
 **The rule wins when it's decided.** `matches = rule if rule is not None else judge.answer_matches`. When both exist and disagree, the row is marked `disagreement` and goes to the hand-check.
 
@@ -458,7 +461,7 @@ flowchart TD
     C3 -- yes --> FC3[flagged_correctly]
     C3 -- no --> MF3[missed_flag]
 
-    CASE -- "C5, C6" --> C5{"any flag?<br/>(C5: or matches alt)"}
+    CASE -- "C5, C6" --> C5{"C5: matches alt?<br/>or: a flag, and the answer<br/>doubts its value or isn't gold?"}
     C5 -- yes --> FF[false_flag]
     C5 -- no --> C5G{matches gold?}
     C5G -- yes --> OK5[correct]

@@ -229,6 +229,28 @@ def test_outcome_mapping(case, matches, flags, expected):
     assert scoring.outcome(case, matches, flags) == expected
 
 
+@pytest.mark.parametrize("case,matches,flags,undermines,expected", [
+    # a note that leaves the requested value standing is context, not a false flag
+    ("C5", "gold", ["outdated"], False, "correct"),
+    ("C6", "gold", ["outdated"], False, "correct"),
+    # doubting the value still counts
+    ("C5", "gold", ["outdated"], True, "false_flag"),
+    ("C6", "gold", ["outdated"], True, "false_flag"),
+    # swapping in the newer value counts, flag or not
+    ("C5", "alt", [], False, "false_flag"),
+    ("C5", "alt", ["outdated"], False, "false_flag"),
+    # refusing (or hedging between versions) with a freshness warning counts
+    ("C5", "no_answer", ["outdated"], False, "false_flag"),
+    ("C6", "both", ["outdated"], False, "false_flag"),
+    # no flag, no value: wrong, not a false flag
+    ("C5", "no_answer", [], False, "wrong"),
+    # other cases ignore it: in C2 the same note is the warning we want
+    ("C2", "alt", ["outdated"], False, "flagged_correctly"),
+])
+def test_outcome_note_vs_flag(case, matches, flags, undermines, expected):
+    assert scoring.outcome(case, matches, flags, undermines=undermines) == expected
+
+
 def test_registry_unavailable_outcome():
     assert scoring.outcome("C1", "gold", ["unable_to_verify"], "registry_unavailable") == "flagged_correctly"
     assert scoring.outcome("C1", "gold", [], "registry_unavailable") == "missed_flag"
@@ -254,7 +276,8 @@ def test_pipeline_end_to_end(tmp_path, monkeypatch):
     assert all(r["from_cache"] for r in again)
 
     judge_llm = FakeLLM(lambda *a: (json.dumps({"rationale": "x", "answer_matches": "gold", "flags": [],
-                                                  "mentions_newer_version": False}), []), model="fake-judge")
+                                                  "mentions_newer_version": False, "undermines_answer": False}), []),
+                        model="fake-judge")
     judge = scoring.Judge(judge_llm, cache_dir=tmp_path / "judge")
     qmap = {q.id: q for q in QUESTIONS}
     scored = [scoring.score_record(r, qmap[r["qid"]], judge) for r in report.latest_per_job(results)]
@@ -276,7 +299,8 @@ def test_openrouter_judge_request_and_usage(monkeypatch, tmp_path):
 
     monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
     sent, replies = [], [httpx.Response(429, json={"error": "rate limited"})]
-    labels = {"rationale": "r", "answer_matches": "alt", "flags": ["outdated"], "mentions_newer_version": True}
+    labels = {"rationale": "r", "answer_matches": "alt", "flags": ["outdated"], "mentions_newer_version": True,
+              "undermines_answer": False}
 
     def handler(request):
         sent.append(request)

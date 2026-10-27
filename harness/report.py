@@ -158,7 +158,7 @@ def export_handcheck(scored_path, out_csv, frac=0.10, seed=0) -> int:
             picked[id(r)] = "disagreement" if id(r) not in picked else "sample+disagreement"
     chosen = [r for r in rows if id(r) in picked]
     fields = ["why", "model", "arm", "qid", "case", "seed", "condition", "answer", "rule_match", "judge_match",
-              "flags", "outcome", "judge_rationale", "human_outcome", "human_note"]
+              "flags", "undermines_answer", "outcome", "judge_rationale", "human_outcome", "human_note"]
     with open(out_csv, "w", newline="") as f:
         w = csv.DictWriter(f, fieldnames=fields, extrasaction="ignore")
         w.writeheader()

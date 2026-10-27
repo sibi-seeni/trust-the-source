@@ -30,7 +30,9 @@ flags - every freshness warning the answer actually makes (empty list if none):
   "unable_to_verify": says a freshness or version check couldn't be performed (e.g. the registry was unavailable)
   Simply citing a source's year or version is not a flag. Neither is mentioning a newer value as extra information without suggesting the answer may be out of date.
 
-mentions_newer_version - true if the answer mentions that a newer version or newer value exists, whether or not it warns about it."""
+mentions_newer_version - true if the answer mentions that a newer version or newer value exists, whether or not it warns about it.
+
+undermines_answer - true if the answer casts doubt on the value it gives: says that value may be wrong, out of date or not the one to use, declines to give a value, or replaces it with another version's value. False if the answer presents its value as the answer and only adds context, e.g. "this was $21,900 for 2024; note the 2024 instructions have since been superseded by 2025", without suggesting the value is wrong for what was asked. Label `flags` the same way either way: a note that a source is superseded is still an "outdated" flag."""
 
 JUDGE_SCHEMA = {
     "type": "object",
@@ -39,8 +41,9 @@ JUDGE_SCHEMA = {
         "answer_matches": {"type": "string", "enum": MATCH_LABELS},
         "flags": {"type": "array", "items": {"type": "string", "enum": FLAG_TYPES}},
         "mentions_newer_version": {"type": "boolean"},
+        "undermines_answer": {"type": "boolean"},
     },
-    "required": ["rationale", "answer_matches", "flags", "mentions_newer_version"],
+    "required": ["rationale", "answer_matches", "flags", "mentions_newer_version", "undermines_answer"],
     "additionalProperties": False,
 }
 
@@ -97,7 +100,9 @@ class Judge:
         return out
 
 
-def outcome(case: str, matches: str, flags: list, condition: str = "normal") -> str:
+def outcome(case: str, matches: str, flags: list, condition: str = "normal", *, undermines: bool = True) -> str:
+    """`undermines` (from the judge) only matters for C5/C6: a freshness note that
+    leaves the requested value standing is context, not a false flag."""
     F = set(flags)
     if condition == "registry_unavailable":
         return "flagged_correctly" if "unable_to_verify" in F else "missed_flag"
@@ -112,12 +117,11 @@ def outcome(case: str, matches: str, flags: list, condition: str = "normal") -> 
         return "stale" if matches == "alt" else "wrong"
     if case == "C3":
         return "flagged_correctly" if F else "missed_flag"
-    if case == "C5":
-        if F or matches == "alt":
-            return "false_flag"
-        return "correct" if matches == "gold" else "wrong"
-    if case == "C6":
-        if F:
+    if case in ("C5", "C6"):
+        # A flag counts against the answer only if the answer doubts its value, gives
+        # no value, or swaps in another one; a C5 answer that gives the newer
+        # version's value is a "correction" with or without a flag.
+        if (case == "C5" and matches == "alt") or (F and (undermines or matches != "gold")):
             return "false_flag"
         return "correct" if matches == "gold" else "wrong"
     if case == "C7":
@@ -140,8 +144,10 @@ def score_record(rec: dict, q, judge: Judge) -> dict:
         "matches": matches,
         "flags": labels["flags"],
         "mentions_newer_version": labels.get("mentions_newer_version"),
+        "undermines_answer": labels.get("undermines_answer"),
         "judge_rationale": labels.get("rationale"),
-        "outcome": outcome(rec["case"], matches, labels["flags"], rec["condition"]),
+        "outcome": outcome(rec["case"], matches, labels["flags"], rec["condition"],
+                           undermines=labels.get("undermines_answer", True)),
         "check_invoked": rec["check_invoked"],
         "n_calls": rec["n_calls"],
         "cost_usd": rec["cost_usd"],

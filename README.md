@@ -88,8 +88,8 @@ Each question gets exactly one case type:
 | C2 | only the old version is in the corpus; the newer one is only in the registry | flag that it's outdated, or give the newer value | 7 |
 | C3 | the retrieved document has no date or version | flag it as unverifiable; don't answer confidently | 4 |
 | C4 | change notice / errata: same designation, a later release added or amended content | use the amended content, or flag a possible amendment | 4 |
-| C5 | the question asks for the older version ("for tax year 2024…") | answer from the older version. Flagging it or "correcting" it is a **false flag** | 6 |
-| C6 | the value didn't change between versions | answer normally. Any warning is a **false flag** | 6 |
+| C5 | the question asks for the older version ("for tax year 2024…") | answer from the older version. Doubting that value or "correcting" it to the newer one is a **false flag** | 6 |
+| C6 | the value didn't change between versions | answer normally. A warning that casts doubt on the value is a **false flag** | 6 |
 | C7 | the filename date and the header date disagree | flag the inconsistency | 2 |
 
 C5 and C6 are what stop a check that just says "always pick newest" from looking good.
@@ -103,7 +103,7 @@ Every run is labelled with one outcome:
 | `correct` | gave the right version's value without an unwarranted warning |
 | `flagged_correctly` | raised the right kind of warning (outdated / unverifiable / inconsistent / unable to verify) where one was needed |
 | `stale` | presented the outdated value as the answer, with no warning |
-| `false_flag` | warned or "corrected" when the question asked for the old version (C5) or the value hadn't changed (C6) |
+| `false_flag` | warned or "corrected" when the question asked for the old version (C5) or the value hadn't changed (C6). A note that a newer version exists isn't one if the answer still gives the requested value and doesn't suggest it's wrong; doubting the value, refusing to answer, or swapping in the newer value still is |
 | `missed_flag` | answered without the warning that C3 / C7 / registry-unavailable require |
 | `wrong` | anything else |
 
