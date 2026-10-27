@@ -53,12 +53,17 @@ def _check_listing(alias, listing, need):
     if info is None:
         print(f"  FAIL {alias}: {spec['slug']} isn't listed on OpenRouter /api/v1/models")
         return False
+    pinned, served = spec.get("canonical"), info.get("canonical_slug")
+    if pinned and served != pinned:
+        print(f"  FAIL {alias}: {spec['slug']} now resolves to {served}, not the pinned {pinned}. "
+              f"Update 'canonical' (and the price) in harness/config.py only if the new version is intended.")
+        return False
     params = set(info.get("supported_parameters") or [])
     pr = info.get("pricing") or {}
     live = (float(pr.get("prompt") or 0) * 1e6, float(pr.get("completion") or 0) * 1e6)
     table = spec["price"]
     note = "" if table and all(abs(a - b) < 1e-6 for a, b in zip(live, table)) else f"  (config table says {table})"
-    print(f"{alias} -> {spec['slug']}: ${live[0]:.2f}/${live[1]:.2f} per 1M{note}; "
+    print(f"{alias} -> {spec['slug']} ({served}): ${live[0]:.2f}/${live[1]:.2f} per 1M{note}; "
           f"reasoning={'reasoning' in params} effort={spec['reasoning'] or 'default'}")
     missing = [n for n in need if not ({n} if isinstance(n, str) else set(n)) & params]
     for n in missing:

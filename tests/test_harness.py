@@ -298,7 +298,7 @@ def test_openrouter_judge_request_and_usage(monkeypatch, tmp_path):
     body = json.loads(sent[-1].content)
     assert len(sent) == 2  # retried after the 429
     assert sent[-1].headers["authorization"] == "Bearer test-key"
-    assert body["model"] == "openai/gpt-6-sol-20260922" and body["reasoning"] == {"effort": "low"}
+    assert body["model"] == "openai/gpt-6-sol" and body["reasoning"] == {"effort": "low"}
     assert body["response_format"]["json_schema"]["strict"] is True
     assert [m["role"] for m in body["messages"]] == ["system", "user"]
     assert "ANSWER TO LABEL" in body["messages"][1]["content"]
@@ -335,7 +335,7 @@ def test_openrouter_tool_call_round_trip(monkeypatch):
                         tools=[CHECK_LATEST_VERSION_DECL, VERIFY_SOURCES_DECL], web_search=True,
                         seed=2, tool_choice="none")
     body = sent[0]
-    assert body["model"] == "deepseek/deepseek-v4.1-flash-20260910"
+    assert body["model"] == "deepseek/deepseek-v4.1-flash"
     assert body["messages"][0] == {"role": "system", "content": "s"}
     assert body["temperature"] == 0.0 and body["seed"] == 2 and body["tool_choice"] == "none"
     assert body["tools"][0]["function"]["name"] == "check_latest_version"
@@ -344,23 +344,40 @@ def test_openrouter_tool_call_round_trip(monkeypatch):
     assert "reasoning" not in body  # deepseek-flash uses the model default
     assert turn.tool_calls[0].id == "tc1" and turn.tool_calls[0].args == {"title_or_id": "Rev 4"}
     assert turn.message["reasoning_details"] == reasoning_details
-    # no OpenRouter cost reported -> price table: 1000*0.07 + 300*0.50 per 1M
-    assert turn.record["cost_usd"] == pytest.approx((1000 * 0.07 + 300 * 0.50) / 1e6)
+    # no OpenRouter cost reported -> price table: 1000*0.14 + 300*0.42 per 1M
+    assert turn.record["cost_usd"] == pytest.approx((1000 * 0.14 + 300 * 0.42) / 1e6)
     json.dumps(turn.record)
 
 
 def test_model_aliases_resolve():
-    assert config.resolve("glm-5.3")["slug"] == "z-ai/glm-5.3-20260816"
+    assert config.resolve("glm-5.3")["slug"] == "z-ai/glm-5.3"
     assert config.resolve("glm-5.3")["reasoning"] == "low"
     assert config.resolve("google/gemini-4-argon")["alias"] == "gemini-4-argon"
-    assert config.resolve(config.JUDGE_MODEL)["slug"] == "openai/gpt-6-luna-20260922"
+    assert config.resolve(config.JUDGE_MODEL)["slug"] == "openai/gpt-6-luna"
     assert config.resolve(config.JUDGE_MODEL)["reasoning"] == "low"
     assert config.SWEEP_MODELS == ["deepseek-flash", "nemotron-3.5-super-vl"]
-    assert config.resolve("nemotron-3.5-super-vl")["slug"] == "nvidia/nemotron-3.5-super-vl-20261015"
+    assert config.resolve("nemotron-3.5-super-vl")["slug"] == "nvidia/nemotron-3.5-super-vl"
+    # a pinned canonical slug resolves to its alias, and requests still send the id
+    assert config.resolve("deepseek/deepseek-v4.1-flash-20260910")["slug"] == "deepseek/deepseek-v4.1-flash"
     custom = config.resolve("someone/new-model")
     assert custom["slug"] == "someone/new-model" and custom["price"] is None
     for alias in ("deepseek-flash", "nemotron-3.5-super-vl", "glm-5.3", "gpt-6-luna", "gpt-6-sol", "gemini-4-argon", "gemini-3.8-flash"):
         assert alias in config.MODELS
+
+
+def test_preflight_listing_uses_ids_and_checks_the_pin(capsys):
+    from harness.__main__ import _check_listing
+
+    def listing(canonical):
+        return {"deepseek/deepseek-v4.1-flash": {
+            "id": "deepseek/deepseek-v4.1-flash", "canonical_slug": canonical,
+            "pricing": {"prompt": "0.00000014", "completion": "0.00000042"},
+            "supported_parameters": ["tools", "tool_choice", "reasoning"]}}
+
+    assert _check_listing("deepseek-flash", listing("deepseek/deepseek-v4.1-flash-20260910"), ["tools", "tool_choice"])
+    assert "(config table says" not in capsys.readouterr().out
+    assert not _check_listing("deepseek-flash", listing("deepseek/deepseek-v4.1-flash-20261201"), ["tools"])
+    assert "not the pinned deepseek/deepseek-v4.1-flash-20260910" in capsys.readouterr().out
 
 
 def test_openrouter_embedder(tmp_path):

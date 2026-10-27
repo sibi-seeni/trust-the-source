@@ -14,24 +14,26 @@ This repo is the harness for the experiment in *Track 2 Closure Experiment: Fres
 
 Every model is called through **OpenRouter** (`https://openrouter.ai/api/v1`) with one API key. The current budget setup is:
 
-| Role | Alias → OpenRouter slug | Reasoning effort | $ / 1M tokens in / out |
+| Role | Alias → OpenRouter id (pinned version) | Reasoning effort | $ / 1M tokens in / out |
 |---|---|---|---|
-| Main sweep | `deepseek-flash` → `deepseek/deepseek-v4.1-flash-20260910` | model default | $0.07 / $0.50 |
-| Main sweep | `nemotron-3.5-super-vl` → `nvidia/nemotron-3.5-super-vl-20261015` | model default (reasons by default) | $0.10 / $0.40 |
-| Judge | `gpt-6-luna` → `openai/gpt-6-luna-20260922` | `low` | $0.10 / $0.50 |
+| Main sweep | `deepseek-flash` → `deepseek/deepseek-v4.1-flash` (`-20260910`) | model default | $0.14 / $0.42 |
+| Main sweep | `nemotron-3.5-super-vl` → `nvidia/nemotron-3.5-super-vl` (`-20261015`) | model default (reasons by default) | $0.15 / $0.50 |
+| Judge | `gpt-6-luna` → `openai/gpt-6-luna` (`-20260922`) | `low` | $0.10 / $0.50 |
+
+Requests use OpenRouter's model **id**. The dated name in brackets is the `canonical_slug` that id pointed to when the table was written. `preflight` fails if an id starts pointing at a different version, so a silent model update can't slip into a run; update `canonical` in `harness/config.py` only if the new version is intended.
 
 **Both main-sweep models run in parallel.** Each stage sends every question × arm × seed to both models through one shared worker pool. The jobs alternate between models, so neither finishes far ahead of the other. Results go into the same run folder, and the report gives each model its own table and its own closure-rule check. No confirmation model is configured, since this track is being wrapped up.
 
 The other models are kept in [`harness/config.py`](harness/config.py), so switching to them is one flag or environment variable:
 
-| Alias | OpenRouter slug | Tier | Reasoning effort | $ / 1M in / out | Intended use |
+| Alias | OpenRouter id (pinned version) | Tier | Reasoning effort | $ / 1M in / out | Intended use |
 |---|---|---|---|---|---|
-| `glm-5.3` | `z-ai/glm-5.3-20260816` | budget | `low` (its default is `max`) | $1.40 / $4.40 | optional extra model under test |
-| `gpt-6-sol` | `openai/gpt-6-sol-20260922` | funded | `low` | $2.00 / $10.00 | judge once there's funding |
-| `gemini-4-argon` | `google/gemini-4-argon` | funded | default | $2.00 / $10.00 | confirmation model from the design doc |
-| `gemini-3.8-flash` | `google/gemini-3.8-flash-20260902` | funded | default | $0.75 / $3.75 | the model this harness was first built for |
+| `glm-5.3` | `z-ai/glm-5.3` (`-20260816`) | budget | `low` (its default is `max`) | $0.07 / $1.40 | optional extra model under test |
+| `gpt-6-sol` | `openai/gpt-6-sol` (`-20260922`) | funded | `low` | $2.00 / $10.00 | judge once there's funding |
+| `gemini-4-argon` | `google/gemini-4-argon` (`-20261013`) | funded | default | $2.00 / $10.00 | confirmation model from the design doc |
+| `gemini-3.8-flash` | `google/gemini-3.8-flash` (`-20260902`) | funded | default | $0.83 / $4.13 | the model this harness was first built for |
 
-For example: `--models deepseek-flash,gemini-3.8-flash`, `TTS_JUDGE_MODEL=gpt-6-sol`. Any other OpenRouter slug also works in `--models`; the price table is only needed for estimates, because the logged cost comes from OpenRouter itself. Prices are from the OpenRouter model pages in Oct 2026. `preflight` prints the live prices next to the table so you can spot drift.
+For example: `--models deepseek-flash,gemini-3.8-flash`, `TTS_JUDGE_MODEL=gpt-6-sol`. Any other OpenRouter model id also works in `--models`; the price table is only needed for estimates, because the logged cost comes from OpenRouter itself. Prices are from OpenRouter's `/api/v1/models` on Oct 27, 2026. `preflight` prints the live prices next to the table so you can spot drift.
 
 ## What it does
 
@@ -282,12 +284,12 @@ A few things were deliberately changed or left out:
 
 | | Pilot | Sweep | Unavailable | Live | Total |
 |---|---|---|---|---|---|
-| DeepSeek V4.1 Flash | $0.05–0.15 | $0.51–1.57 | $0.06–0.18 | $0.01–0.03 | **$0.62–1.94** |
-| Nemotron 3.5 Super VL | $0.05–0.13 | $0.49–1.39 | $0.06–0.16 | $0.01–0.03 | **$0.61–1.71** |
+| DeepSeek V4.1 Flash | $0.06–0.15 | $0.59–1.56 | $0.07–0.18 | $0.01–0.03 | **$0.72–1.92** |
+| Nemotron 3.5 Super VL | $0.06–0.17 | $0.67–1.81 | $0.08–0.21 | $0.01–0.04 | **$0.82–2.23** |
 | Judge: GPT-6 Luna, low effort (~250–600 output tokens per label) | | | | | **$0.47–0.86** |
-| **Everything** | | | | | **≈ $1.70–4.50** |
+| **Everything** | | | | | **≈ $2.00–5.00** |
 
-Add a few cents for embeddings and the live stage's web search fees. At the doc's ~90 questions, everything comes to **≈ $3.80–10.10** (`estimate --questions 90`). For comparison, GPT-6 Sol as the judge would cost about $9–17 on its own at 38 questions.
+Add a few cents for embeddings and the live stage's web search fees. At the doc's ~90 questions, everything comes to **≈ $4.50–11.20** (`estimate --questions 90`). For comparison, GPT-6 Sol as the judge would cost about $9–17 on its own at 38 questions.
 
 After the pilot, `estimate --from-run pilot` redoes the table from the tokens that were actually used, per arm. That's the number to trust before committing to the sweep.
 

@@ -352,7 +352,7 @@ flowchart TD
     E -- no --> PARSE["Parse: text, tool calls (args JSON-decoded),<br/>usage (prompt / output / reasoning / cached),<br/>cost = OpenRouter's reported cost, else price table,<br/>provider and served model version"]
 ```
 
-- **Pinned versions:** models are pinned to dated slugs where OpenRouter has one, e.g. `deepseek/deepseek-v4.1-flash-20260910`, so results don't drift mid-run. The model version and provider actually served are logged anyway.
+- **Pinned versions:** requests send OpenRouter's model id (e.g. `deepseek/deepseek-v4.1-flash`), the only name the API accepts. The config also records the dated `canonical_slug` that id pointed to (`deepseek/deepseek-v4.1-flash-20260910`), and `preflight` fails if the id now resolves to a different version, so results don't drift mid-run. The model version and provider actually served are logged anyway.
 - **Reasoning effort:** this comes from the model table: model default for DeepSeek and Nemotron, `low` for the judge. `TTS_REASONING_EFFORT` and `TTS_JUDGE_REASONING_EFFORT` override it.
 - **Usage:** reasoning tokens are split out of `completion_tokens`, so the log shows how much each model "thinks". That's the biggest driver of cost.
 
@@ -524,7 +524,7 @@ With `--from-run pilot`, it replaces the assumptions with what the pilot actuall
 
 ## 12. Extending it
 
-**Add a model.** Add a line to `MODELS` in `harness/config.py` with an alias, slug, price, reasoning effort and tier. Then run it with `--models <alias>` or add it to `TTS_MODELS`. Raw OpenRouter slugs work too, without a table entry; they just won't appear in estimates. Run `preflight --models <alias>` first.
+**Add a model.** Add a line to `MODELS` in `harness/config.py` with an alias, the OpenRouter model `id` as `slug`, the `canonical_slug` it currently points to as `canonical` (both are in `/api/v1/models`), price, reasoning effort and tier. Then run it with `--models <alias>` or add it to `TTS_MODELS`. Raw OpenRouter ids work too, without a table entry; they just won't appear in estimates or be pinned. Run `preflight --models <alias>` first.
 
 **Switch the judge.** Set `TTS_JUDGE_MODEL=gpt-6-sol`. The judge must support strict JSON-schema output, which preflight checks.
 
