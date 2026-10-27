@@ -100,7 +100,7 @@
     {"id": "nist-11", "family": "NIST-SP-800-53", "case": "C7", "pilot": true, "verified": true,
      "question": "How many control families are in NIST SP 800-53?",
      "corpus": ["nist-c7"], "gold_passages": ["nist-c7-p1"],
-     "gold_answer": "Flags that the file is labelled Rev 5 but its text says Revision 4 (April 2013)", "alt_answer": "18 families given as the Rev 5 figure without noting the mismatch",
+     "gold_answer": "Flags that the file is labelled Rev 5 but its text carries the 'Special Publication 800-53 Revision 4' header and eighteen families", "alt_answer": "18 families given as the Rev 5 figure without noting the mismatch",
      "accept": [], "alt": []},
     {"id": "nist-12", "family": "NIST-SP-800-53", "case": "C4", "pilot": true, "verified": true,
      "question": "Does NIST SP 800-53 Rev 5 include a control for designing systems for cyber resiliency?",
