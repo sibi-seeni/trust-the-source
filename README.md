@@ -1,6 +1,6 @@
 # trust-the-source
 
-**Track 2 closure experiment:** does a harness-level freshness check make stale documents a non-issue?
+**Track 2 closure experiment:** does a harness-level freshness check make stale documents a non-issue? **Results and verdict: [CLOSURE_REPORT.md](CLOSURE_REPORT.md).**
 
 This repo is the harness for the experiment in *Track 2 Closure Experiment: Freshness Check Harness Comparison* (Oct 23, 2026, Team Signet). Dr. Gasbarro's position is that stale or superseded documents (H6, Track 2) are handled once the harness checks whether a document is the latest version. The experiment is meant to confirm that cheaply and close the track, not to reopen it. It answers three questions:
 
