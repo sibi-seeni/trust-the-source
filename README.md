@@ -131,6 +131,7 @@ The report gives these per model and arm, always together:
 data/docs.json          corpus: 15 documents across 5 families (D1–D3, D6, D7), verbatim passage text + ingestion metadata
 data/questions.json     question set: case type, gold / alternative answers, gold passages, regexes
 data/registry.json      mock version registry
+data/files/             the source pages each passage was copied from (excerpts, with a page map)
 data/confirm_set.json   written by select-confirm (only if a confirmation round is ever run)
 skills/version-check/   the skill loaded by arm A5
 harness/
