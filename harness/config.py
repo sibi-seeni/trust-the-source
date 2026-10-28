@@ -13,7 +13,9 @@ CACHE_DIR = ROOT / "cache"
 #
 # alias -> OpenRouter model id (what requests send), the canonical slug that id
 # pointed to when the table was written, USD per 1M tokens (input, output),
-# reasoning effort to request (None = the model's default), and tier. OpenRouter
+# reasoning effort to request (None = the model's default, "on" = switch reasoning
+# on for models that have no effort levels), tier, and optionally "provider": an
+# OpenRouter provider-routing object sent with every request. OpenRouter
 # only accepts the id in requests; the canonical slug is its permanent dated name.
 # Preflight fails if an id now resolves to a different canonical slug, so results
 # don't shift mid-run without anyone noticing; the served model is logged on every
@@ -25,8 +27,16 @@ MODELS = {
     # Budget tier: what the team is paying for now.
     "deepseek-flash": {"slug": "deepseek/deepseek-v4.1-flash", "canonical": "deepseek/deepseek-v4.1-flash-20260910",
                        "price": (0.14, 0.42), "reasoning": None, "tier": "budget"},
-    # Reasoning is on by default; OpenRouter routes tool-calling requests to the
-    # providers that support tools (3 of its 4).
+    # The US open-weight model under test (swapped in for Nemotron at the project
+    # sponsor's request, Oct 28, 2026). Thinking is an on/off switch with no effort
+    # levels and an unclear default, so it's switched on explicitly, matching
+    # Nemotron, which reasons by default. Many providers serve it at fp4; the provider
+    # filter keeps requests on fp8 or better (endpoints reporting "unknown" are left out).
+    "gemma-4-31b": {"slug": "google/gemma-4-31b-it", "canonical": "google/gemma-4-31b-it-20260402",
+                    "price": (0.20, 0.40), "reasoning": "on", "tier": "budget",
+                    "provider": {"quantizations": ["fp8", "bf16", "fp16", "fp32"]}},
+    # The previous US open-weight model, used in runs/pilot. Reasoning is on by
+    # default; OpenRouter routes tool-calling requests to the providers that support tools.
     "nemotron-3.5-super-vl": {"slug": "nvidia/nemotron-3.5-super-vl", "canonical": "nvidia/nemotron-3.5-super-vl-20261015",
                               "price": (0.15, 0.50), "reasoning": None, "tier": "budget"},
     # GLM 5.3 always reasons and defaults to effort "max", which multiplies output
@@ -49,7 +59,7 @@ MODELS = {
 
 # Models under test. Every stage runs all of them in parallel, and the report
 # gives each its own table. Comma-separated aliases or slugs.
-SWEEP_MODELS = os.environ.get("TTS_MODELS", "deepseek-flash,nemotron-3.5-super-vl").split(",")
+SWEEP_MODELS = os.environ.get("TTS_MODELS", "deepseek-flash,gemma-4-31b").split(",")
 # The judge is GPT-6 Luna at low reasoning effort: cheap, and a different model
 # family from both models under test. Switch to gpt-6-sol once there's funding
 # (TTS_JUDGE_MODEL=gpt-6-sol).
@@ -63,7 +73,7 @@ JUDGE_REASONING_OVERRIDE = os.environ.get("TTS_JUDGE_REASONING_EFFORT") or None
 
 
 def resolve(model: str) -> dict:
-    """Alias, OpenRouter id or canonical slug -> {"alias", "slug", "price", "reasoning", "tier"}.
+    """Alias, OpenRouter id or canonical slug -> {"alias", "slug", "price", "reasoning", "tier", "provider"?}.
     "slug" is always the id that requests send."""
     if model in MODELS:
         m = {"alias": model, **MODELS[model]}
