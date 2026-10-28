@@ -2,7 +2,9 @@
 
 **Track 2 closure experiment:** does a harness-level freshness check make stale documents a non-issue? **Results and verdict: [CLOSURE_REPORT.md](CLOSURE_REPORT.md).**
 
-This repo is the harness for the experiment in *Track 2 Closure Experiment: Freshness Check Harness Comparison* (Oct 23, 2026, Team Signet). Dr. Gasbarro's position is that stale or superseded documents (H6, Track 2) are handled once the harness checks whether a document is the latest version. The experiment is meant to confirm that cheaply and close the track, not to reopen it. It answers three questions:
+> This repo is now the frozen Track 2 archive.** The harness lives on as the team's shared harness, [signet-harness](https://github.com/sibi-seeni/signet-harness) (v0.1.0), with Track 2 as its reference experiment. Its prompts and behaviour are byte-identical to this repo at `389b781`. New work goes there.
+
+This repo is the harness for the experiment in *Track 2 Closure Experiment: Freshness Check Harness Comparison* (Oct 23, 2026, Team Signet). Team's position is that stale or superseded documents (H6, Track 2) are handled once the harness checks whether a document is the latest version. The experiment is meant to confirm that cheaply and close the track, not to reopen it. It answers three questions:
 
 1. **Does a freshness check eliminate stale answers?** We look at this both when the newer version is in the corpus and when it exists only outside it.
 2. **Which way of wiring the check in works best for its cost?** The options are a system prompt, metadata, a tool call, a forced pre-check, a skill or a sub-agent.
@@ -56,7 +58,7 @@ Every question goes through the same retrieval: hybrid BM25 + dense, top‑5, wi
 | A6 Sub-agent | the model calls `verify_sources()`; a separate verifier call that only sees the passages + registry returns JSON `{doc, status, latest_value, confidence, note}` | model delegates, verifier decides | 2+ |
 | A7 Forced sub-agent | same verifier, always run by code before the answer | code, always | 2+ |
 
-**Why A4 and A7 matter:** they test Gasbarro's exact claim that *the harness* does the check. A3, A5 and A6 test whether the model remembers to check when it's left to decide. The gap between those two groups is the most quotable result in the report.
+**Why A4 and A7 matter:** they test team's exact claim that *the harness* does the check. A3, A5 and A6 test whether the model remembers to check when it's left to decide. The gap between those two groups is the most quotable result in the report.
 
 ### The "online check": a mock version registry
 
