@@ -12,7 +12,7 @@ from pathlib import Path
 from . import arms, config
 from .data import Corpus, load_questions, load_registry
 from .estimate import estimate, measured_profile
-from .llm import OpenRouterLLM, list_models
+from .llm import OpenRouterLLM, list_endpoints, list_models
 from .registry import CHECK_LATEST_VERSION_DECL
 from .report import build_report, export_handcheck, latest_per_job, load_jsonl, select_confirm
 from .retrieval import OpenRouterEmbedder
@@ -71,6 +71,27 @@ def _check_listing(alias, listing, need):
     return not missing
 
 
+# OpenRouter's quantization filter counts these variants as their base format.
+_QUANT_FAMILY = {"mxfp8": "fp8", "mxfp4": "fp4", "nvfp4": "fp4"}
+
+
+def _check_endpoints(alias, endpoints, need):
+    """A model with a provider quantization filter must still have at least one
+    endpoint that passes it and supports what we need."""
+    allowed = set((config.resolve(alias).get("provider") or {}).get("quantizations") or [])
+    if not allowed:
+        return True
+    ok = [e for e in endpoints
+          if (q := e.get("quantization") or "unknown") in allowed or _QUANT_FAMILY.get(q) in allowed
+          if set(need) <= set(e.get("supported_parameters") or [])]
+    names = ", ".join(f"{e['provider_name']} ({e.get('quantization')})" for e in ok)
+    if not ok:
+        print(f"  FAIL {alias}: no endpoint serves it at {sorted(allowed)} with {need}")
+    else:
+        print(f"  {alias}: {len(ok)} of {len(endpoints)} endpoints pass the quantization filter: {names}")
+    return bool(ok)
+
+
 def cmd_preflight(args):
     """Fail fast before spending: models are listed with tool / JSON support, a tool
     call round-trips, the judge returns schema JSON, embeddings work."""
@@ -78,6 +99,8 @@ def cmd_preflight(args):
     listing = list_models()
     models = args.models.split(",") if args.models else config.SWEEP_MODELS
     ok = all([_check_listing(m, listing, ["tools", "tool_choice"]) for m in models])
+    ok &= all([_check_endpoints(m, list_endpoints(config.resolve(m)["slug"]), ["tools", "tool_choice"])
+               for m in models if config.resolve(m).get("provider")])
     ok &= _check_listing(config.JUDGE_MODEL, listing, [("structured_outputs", "response_format")])
     if not ok:
         sys.exit(1)
@@ -97,8 +120,12 @@ def cmd_preflight(args):
             {"family": "NIST-SP-800-53", "version": "Rev 4", "status": "withdrawn", "latest": "Rev 5"})}]
         turn2 = llm.generate(system=sys_msg, messages=messages, tools=[CHECK_LATEST_VERSION_DECL], seed=0)
         cost = (turn.record["cost_usd"] or 0) + (turn2.record["cost_usd"] or 0)
+        thoughts = turn.usage["thoughts"] + turn2.usage["thoughts"]
         print(f"{alias}: tool round-trip OK via {turn.record['provider']} ({turn.record['model_version']}): "
-              f"{turn2.text.strip()[:120]!r} | ${cost:.5f}")
+              f"{turn2.text.strip()[:120]!r} | {thoughts} reasoning tokens | ${cost:.5f}")
+        if llm.reasoning_effort == "on" and not thoughts:
+            print(f"  FAIL {alias}: reasoning is set to 'on' but no reasoning tokens came back")
+            ok = False
 
     jt = make_judge_llm().generate(
         system="You label answers.", seed=0,
@@ -163,8 +190,8 @@ def cmd_run(args):
     run_dir.mkdir(parents=True, exist_ok=True)
     (run_dir / "meta.json").write_text(json.dumps({
         "stage": args.stage,
-        "models": [{"alias": m.alias, "slug": m.model, "reasoning_effort": m.reasoning_effort or "default"}
-                   for m in llms],
+        "models": [{"alias": m.alias, "slug": m.model, "reasoning_effort": m.reasoning_effort or "default",
+                    **({"provider_filter": m.provider} if m.provider else {})} for m in llms],
         "temperature": config.TEMPERATURE,
         "judge_model": config.resolve(config.JUDGE_MODEL)["slug"],
         "judge_reasoning_effort": (judge.reasoning_effort if judge else

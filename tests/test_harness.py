@@ -22,6 +22,7 @@ class FakeLLM:
 
     def __init__(self, script, model="fake-model"):
         self.script, self.model, self.alias, self.reasoning_effort = script, model, model, None
+        self.provider = None
         self.calls = []
 
     def generate(self, *, system, messages, tools=None, **kw):
@@ -366,11 +367,52 @@ def test_openrouter_tool_call_round_trip(monkeypatch):
     assert body["tools"][1]["function"]["parameters"] == {"type": "object", "properties": {}}
     assert body["tools"][2] == {"type": "openrouter:web_search"}
     assert "reasoning" not in body  # deepseek-flash uses the model default
+    assert "provider" not in body and turn.record["config"]["provider_filter"] is None
     assert turn.tool_calls[0].id == "tc1" and turn.tool_calls[0].args == {"title_or_id": "Rev 4"}
     assert turn.message["reasoning_details"] == reasoning_details
     # no OpenRouter cost reported -> price table: 1000*0.14 + 300*0.42 per 1M
     assert turn.record["cost_usd"] == pytest.approx((1000 * 0.14 + 300 * 0.42) / 1e6)
     json.dumps(turn.record)
+
+
+def test_gemma_request_switches_reasoning_on_and_filters_quantization(monkeypatch):
+    import httpx
+
+    from harness.llm import OpenRouterLLM
+
+    monkeypatch.setenv("OPENROUTER_API_KEY", "k")
+    sent = []
+
+    def handler(request):
+        sent.append(json.loads(request.content))
+        return httpx.Response(200, json={"model": "google/gemma-4-31b-it-20260402", "provider": "Crusoe",
+            "choices": [{"finish_reason": "stop", "message": {"role": "assistant", "content": "ok"}}],
+            "usage": {"prompt_tokens": 10, "completion_tokens": 5}})
+
+    llm = OpenRouterLLM(model="gemma-4-31b", transport=httpx.MockTransport(handler))
+    turn = llm.generate(system="s", messages=[{"role": "user", "content": "q"}], seed=0)
+    body = sent[0]
+    assert body["model"] == "google/gemma-4-31b-it"
+    assert body["reasoning"] == {"enabled": True}
+    assert body["provider"] == {"quantizations": ["fp8", "bf16", "fp16", "fp32"]}
+    assert turn.record["config"]["reasoning_effort"] == "on"
+    assert turn.record["config"]["provider_filter"] == body["provider"]
+
+
+def test_preflight_endpoints_respect_the_quantization_floor(capsys):
+    from harness.__main__ import _check_endpoints
+
+    def ep(name, quant, params=("tools", "tool_choice")):
+        return {"provider_name": name, "quantization": quant, "supported_parameters": list(params)}
+
+    need = ["tools", "tool_choice"]
+    assert _check_endpoints("gemma-4-31b", [ep("A", "fp4"), ep("B", "bf16"), ep("C", "mxfp8")], need)
+    out = capsys.readouterr().out
+    assert "B (bf16)" in out and "C (mxfp8)" in out and "A (fp4)" not in out
+    # fp4, unknown, or fp8 without tool support don't count
+    assert not _check_endpoints("gemma-4-31b", [ep("A", "nvfp4"), ep("B", "unknown"), ep("C", "fp8", ["seed"])], need)
+    assert "FAIL gemma-4-31b" in capsys.readouterr().out
+    assert _check_endpoints("deepseek-flash", [], need)  # no filter configured -> nothing to check
 
 
 def test_model_aliases_resolve():
@@ -379,13 +421,15 @@ def test_model_aliases_resolve():
     assert config.resolve("google/gemini-4-argon")["alias"] == "gemini-4-argon"
     assert config.resolve(config.JUDGE_MODEL)["slug"] == "openai/gpt-6-luna"
     assert config.resolve(config.JUDGE_MODEL)["reasoning"] == "low"
-    assert config.SWEEP_MODELS == ["deepseek-flash", "nemotron-3.5-super-vl"]
+    assert config.SWEEP_MODELS == ["deepseek-flash", "gemma-4-31b"]
+    assert config.resolve("gemma-4-31b")["slug"] == "google/gemma-4-31b-it"
+    assert config.resolve("google/gemma-4-31b-it-20260402")["alias"] == "gemma-4-31b"
     assert config.resolve("nemotron-3.5-super-vl")["slug"] == "nvidia/nemotron-3.5-super-vl"
     # a pinned canonical slug resolves to its alias, and requests still send the id
     assert config.resolve("deepseek/deepseek-v4.1-flash-20260910")["slug"] == "deepseek/deepseek-v4.1-flash"
     custom = config.resolve("someone/new-model")
     assert custom["slug"] == "someone/new-model" and custom["price"] is None
-    for alias in ("deepseek-flash", "nemotron-3.5-super-vl", "glm-5.3", "gpt-6-luna", "gpt-6-sol", "gemini-4-argon", "gemini-3.8-flash"):
+    for alias in ("deepseek-flash", "gemma-4-31b", "nemotron-3.5-super-vl", "glm-5.3", "gpt-6-luna", "gpt-6-sol", "gemini-4-argon", "gemini-3.8-flash"):
         assert alias in config.MODELS
 
 
@@ -425,4 +469,4 @@ def test_estimate_table():
     plan = stage_runs(QUESTIONS)
     assert sum(r for _, r in plan["sweep"]) == len(QUESTIONS) * 8 * 3
     md = estimate(QUESTIONS, config.SWEEP_MODELS, ["gpt-6-luna"], n_questions=90)
-    assert "| nemotron-3.5-super-vl |" in md and "gpt-6-luna (effort low" in md
+    assert "| gemma-4-31b |" in md and "gpt-6-luna (effort low" in md

@@ -35,6 +35,13 @@ def list_models() -> dict:
     return {m["id"]: m for m in resp.json()["data"]}
 
 
+def list_endpoints(slug: str) -> list:
+    """The provider endpoints serving `slug`, with quantization and supported parameters."""
+    resp = httpx.get(f"{BASE_URL}/models/{slug}/endpoints", timeout=60)
+    resp.raise_for_status()
+    return resp.json()["data"]["endpoints"]
+
+
 def cost_usd(usage: dict, slug: str) -> float | None:
     price = config.price_for(slug)
     if price is None:
@@ -96,6 +103,7 @@ class OpenRouterLLM:
         spec = config.resolve(model)
         self.alias, self.model = spec["alias"], spec["slug"]
         self.reasoning_effort = reasoning_effort or spec["reasoning"]
+        self.provider = spec.get("provider")
         self.attempts = attempts
         self.limiter = _RateLimiter(rpm)
         self.http = httpx.Client(base_url=BASE_URL, timeout=300, transport=transport, headers={
@@ -118,8 +126,12 @@ class OpenRouterLLM:
             body["tools"] = tool_list
             if tool_choice:
                 body["tool_choice"] = tool_choice
-        if self.reasoning_effort:
+        if self.reasoning_effort == "on":
+            body["reasoning"] = {"enabled": True}
+        elif self.reasoning_effort:
             body["reasoning"] = {"effort": self.reasoning_effort}
+        if self.provider:
+            body["provider"] = self.provider
         if json_schema:
             body["response_format"] = {"type": "json_schema", "json_schema": {
                 "name": "output", "strict": True, "schema": json_schema}}
@@ -153,6 +165,7 @@ class OpenRouterLLM:
             "provider": data.get("provider"),
             "config": {"seed": seed, "temperature": config.TEMPERATURE,
                        "reasoning_effort": self.reasoning_effort or "default",
+                       "provider_filter": self.provider,
                        "tools": [d["name"] for d in tools or []] + (["openrouter:web_search"] if web_search else []),
                        "tool_choice": tool_choice, "json_schema": bool(json_schema)},
             "request_messages": body["messages"],

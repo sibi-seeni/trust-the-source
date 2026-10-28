@@ -34,7 +34,7 @@ flowchart LR
     RET --> ARM[Arm A0–A7<br/>builds the prompt,<br/>runs the tool loop]
     R --> REG[Mock registry<br/>check_latest_version]
     REG <--> ARM
-    ARM <--> OR[(OpenRouter<br/>DeepSeek / Nemotron)]
+    ARM <--> OR[(OpenRouter<br/>DeepSeek / Gemma)]
     ARM --> RES[results.jsonl<br/>answer + full trace]
 
     RES --> RULE[Rule match<br/>regex on numbers/ids]
@@ -353,7 +353,8 @@ flowchart TD
 ```
 
 - **Pinned versions:** requests send OpenRouter's model id (e.g. `deepseek/deepseek-v4.1-flash`), the only name the API accepts. The config also records the dated `canonical_slug` that id pointed to (`deepseek/deepseek-v4.1-flash-20260910`), and `preflight` fails if the id now resolves to a different version, so results don't drift mid-run. The model version and provider actually served are logged anyway.
-- **Reasoning effort:** this comes from the model table: model default for DeepSeek and Nemotron, `low` for the judge. `TTS_REASONING_EFFORT` and `TTS_JUDGE_REASONING_EFFORT` override it.
+- **Reasoning effort:** this comes from the model table: model default for DeepSeek, `"on"` for Gemma (sent as `reasoning: {"enabled": true}`, since Gemma has an on/off switch rather than effort levels), `low` for the judge. `TTS_REASONING_EFFORT` and `TTS_JUDGE_REASONING_EFFORT` override it.
+- **Provider filter:** a model entry can carry a `provider` object, which is sent as OpenRouter's provider-routing preferences. Gemma uses it to require fp8 or better (`quantizations: ["fp8", "bf16", "fp16", "fp32"]`), and `preflight` checks the `/models/{id}/endpoints` listing to make sure some tool-capable provider still passes it. The filter is logged with every call and in `meta.json`.
 - **Usage:** reasoning tokens are split out of `completion_tokens`, so the log shows how much each model "thinks". That's the biggest driver of cost.
 
 ---
@@ -366,9 +367,9 @@ flowchart TD
 flowchart LR
     subgraph jobs["Job list (interleaved)"]
         J1["deepseek · A0 · irs-01 · seed 0"]
-        J2["nemotron · A0 · irs-01 · seed 0"]
+        J2["gemma · A0 · irs-01 · seed 0"]
         J3["deepseek · A1 · irs-01 · seed 0"]
-        J4["nemotron · A1 · irs-01 · seed 0"]
+        J4["gemma · A1 · irs-01 · seed 0"]
         J5["..."]
     end
     jobs --> POOL["Thread pool<br/>--workers 8 in total"]
@@ -480,7 +481,7 @@ flowchart TD
 
 ## 10. The report and the closure rule
 
-`report.md` groups scored runs by **model** and **condition**, then by arm, keeping only the latest row per job. So there's one table for DeepSeek and one for Nemotron.
+`report.md` groups scored runs by **model** and **condition**, then by arm, keeping only the latest row per job. So there's one table for DeepSeek and one for Gemma.
 
 | Column | Computed over | Definition |
 |---|---|---|

@@ -17,8 +17,13 @@ Every model is called through **OpenRouter** (`https://openrouter.ai/api/v1`) wi
 | Role | Alias → OpenRouter id (pinned version) | Reasoning effort | $ / 1M tokens in / out |
 |---|---|---|---|
 | Main sweep | `deepseek-flash` → `deepseek/deepseek-v4.1-flash` (`-20260910`) | model default | $0.14 / $0.42 |
-| Main sweep | `nemotron-3.5-super-vl` → `nvidia/nemotron-3.5-super-vl` (`-20261015`) | model default (reasons by default) | $0.15 / $0.50 |
+| Main sweep | `gemma-4-31b` → `google/gemma-4-31b-it` (`-20260402`) | thinking switched on (`"on"`) | $0.20 / $0.40 |
 | Judge | `gpt-6-luna` → `openai/gpt-6-luna` (`-20260922`) | `low` | $0.10 / $0.50 |
+
+**Gemma 4 31B replaced Nemotron 3.5 Super VL** as the US open-weight model on Oct 28, 2026, at the project sponsor's request. [`runs/pilot/`](runs/pilot) is from before the swap and still has Nemotron's results. Two settings are specific to Gemma:
+
+- **Thinking is switched on explicitly.** Gemma 4's thinking is an on/off switch with no effort levels, and its default isn't clear across providers. `"reasoning": "on"` in the config sends `reasoning: {"enabled": true}`, which keeps it in line with Nemotron, which always reasoned. `preflight` fails if no reasoning tokens come back.
+- **At least fp8 weights.** Many providers serve Gemma at fp4. The config sends OpenRouter's provider filter `quantizations: ["fp8", "bf16", "fp16", "fp32"]` with every Gemma request, so routing only uses fp8 or better. Endpoints that report `unknown` quantization are left out too. `preflight` lists the providers that pass the filter (on Oct 28: Crusoe and Novita at bf16, Parasail, DeepInfra and SiliconFlow at fp8) and fails if none do.
 
 Requests use OpenRouter's model **id**. The dated name in brackets is the `canonical_slug` that id pointed to when the table was written. `preflight` fails if an id starts pointing at a different version, so a silent model update can't slip into a run; update `canonical` in `harness/config.py` only if the new version is intended.
 
@@ -28,6 +33,7 @@ The other models are kept in [`harness/config.py`](harness/config.py), so switch
 
 | Alias | OpenRouter id (pinned version) | Tier | Reasoning effort | $ / 1M in / out | Intended use |
 |---|---|---|---|---|---|
+| `nemotron-3.5-super-vl` | `nvidia/nemotron-3.5-super-vl` (`-20261015`) | budget | default (reasons by default) | $0.15 / $0.50 | the US open-weight model before Gemma; used in `runs/pilot` |
 | `glm-5.3` | `z-ai/glm-5.3` (`-20260816`) | budget | `low` (its default is `max`) | $0.07 / $1.40 | optional extra model under test |
 | `gpt-6-sol` | `openai/gpt-6-sol` (`-20260922`) | funded | `low` | $2.00 / $10.00 | judge once there's funding |
 | `gemini-4-argon` | `google/gemini-4-argon` (`-20261013`) | funded | default | $2.00 / $10.00 | confirmation model from the design doc |
@@ -229,7 +235,7 @@ Useful flags for `run`:
 | Variable | Default | Effect |
 |---|---|---|
 | `OPENROUTER_API_KEY` | — | required for preflight, run and score |
-| `TTS_MODELS` | `deepseek-flash,nemotron-3.5-super-vl` | models under test (same as `--models`) |
+| `TTS_MODELS` | `deepseek-flash,gemma-4-31b` | models under test (same as `--models`) |
 | `TTS_JUDGE_MODEL` | `gpt-6-luna` | judge model, alias or slug |
 | `TTS_REASONING_EFFORT` | unset (table value) | overrides reasoning effort for the models under test |
 | `TTS_JUDGE_REASONING_EFFORT` | unset (`low` from the table) | overrides the judge's reasoning effort |
@@ -285,11 +291,11 @@ A few things were deliberately changed or left out:
 | | Pilot | Sweep | Unavailable | Live | Total |
 |---|---|---|---|---|---|
 | DeepSeek V4.1 Flash | $0.06–0.15 | $0.59–1.56 | $0.07–0.18 | $0.01–0.03 | **$0.72–1.92** |
-| Nemotron 3.5 Super VL | $0.06–0.17 | $0.67–1.81 | $0.08–0.21 | $0.01–0.04 | **$0.82–2.23** |
+| Gemma 4 31B | $0.07–0.16 | $0.69–1.68 | $0.08–0.19 | $0.02–0.04 | **$0.85–2.07** |
 | Judge: GPT-6 Luna, low effort (~250–600 output tokens per label) | | | | | **$0.47–0.86** |
-| **Everything** | | | | | **≈ $2.00–5.00** |
+| **Everything** | | | | | **≈ $2.05–4.85** |
 
-Add a few cents for embeddings and the live stage's web search fees. At the doc's ~90 questions, everything comes to **≈ $4.50–11.20** (`estimate --questions 90`). For comparison, GPT-6 Sol as the judge would cost about $9–17 on its own at 38 questions.
+Add a few cents for embeddings and the live stage's web search fees. At the doc's ~90 questions, everything comes to **≈ $4.60–10.80** (`estimate --questions 90`). For comparison, GPT-6 Sol as the judge would cost about $9–17 on its own at 38 questions.
 
 After the pilot, `estimate --from-run pilot` redoes the table from the tokens that were actually used, per arm. That's the number to trust before committing to the sweep.
 
