@@ -1,0 +1,58 @@
+{
+  "stage": "pilot",
+  "models": [
+    {
+      "alias": "deepseek-flash",
+      "slug": "deepseek/deepseek-v4.1-flash",
+      "reasoning_effort": "default"
+    },
+    {
+      "alias": "gemma-4-31b",
+      "slug": "google/gemma-4-31b-it",
+      "reasoning_effort": "on",
+      "provider_filter": {
+        "quantizations": [
+          "fp8",
+          "bf16",
+          "fp16",
+          "fp32"
+        ]
+      }
+    }
+  ],
+  "temperature": 0.0,
+  "judge_model": "openai/gpt-6-luna",
+  "judge_reasoning_effort": "low",
+  "embed_model": "openai/text-embedding-3-small",
+  "retrieval": "hybrid",
+  "arms": [
+    "A0",
+    "A1",
+    "A2",
+    "A3",
+    "A4",
+    "A5",
+    "A6",
+    "A7"
+  ],
+  "seeds": [
+    0
+  ],
+  "condition": "normal",
+  "questions": [
+    "irs-01",
+    "irs-03",
+    "irs-05",
+    "nist-01",
+    "nist-05",
+    "nist-08",
+    "nist-11",
+    "nist-12",
+    "gsa-04",
+    "gsa-05",
+    "pandas-03"
+  ],
+  "prompt_version": "v2",
+  "git_commit": "277d9581be3a79a61528d8732baf03805ae823a1",
+  "started": "2026-10-28T00:48:16.263488"
+}
