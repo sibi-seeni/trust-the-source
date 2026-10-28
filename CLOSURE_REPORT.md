@@ -6,7 +6,7 @@
 
 **Yes, Track 2 can be closed.** If the system checks every document against a version list *before* the AI answers (arm A4), stale answers on our test drop from 44% to **0%**. That held for both AI models we tested. It cost almost nothing (about 3–5 cents per 100 questions) and it caused **no false alarms**.
 
-Dr. Gasbarro's position holds: *the harness* has to do the check. Leaving it up to the AI to remember to check only works for some models. DeepSeek usually remembers; Gemma almost never does.
+Team Signet's position holds: *the harness* has to do the check. Leaving it up to the AI to remember to check only works for some models. DeepSeek usually remembers; Gemma almost never does.
 
 The check has two limits, which we're handing to Track 1:
 
